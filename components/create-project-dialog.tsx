@@ -4,8 +4,8 @@
 
 "use client";
 
-import React, { useState } from 'react';
-import { Plus, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Loader2, AlertCircle, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ProjectService, type Project } from '@/services';
+import { ClientService, type Client } from '@/services/client.service';
+import { CreateClientDialog } from '@/components/create-client-dialog';
 import { db } from '@/lib/firebase.config';
 
 const COLORS = [
@@ -33,21 +42,55 @@ const COLORS = [
 interface CreateProjectDialogProps {
   userId: string;
   onProjectCreated: (project: Project) => void;
+  children?: React.ReactNode;
 }
 
 export function CreateProjectDialog({
   userId,
   onProjectCreated,
+  children,
 }: CreateProjectDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loadingClients, setLoadingClients] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     color: COLORS[4], // cyan default
+    clientId: '',
     budget: '',
+    hourlyRate: '',
+    estimatedTime: '',
   });
+
+  // Cargar clientes cuando el diálogo se abre
+  useEffect(() => {
+    if (open && userId) {
+      loadClients();
+    }
+  }, [open, userId]);
+
+  const loadClients = async () => {
+    try {
+      setLoadingClients(true);
+      const clientService = ClientService.getInstance(db);
+      const userClients = await clientService.getAllClients();
+      // Filtrar solo los clientes del usuario actual
+      const filteredClients = userClients.filter(client => client.ownerId === userId);
+      setClients(filteredClients);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
+  const handleClientCreated = (newClient: Client) => {
+    setClients(prev => [...prev, newClient]);
+    setFormData({ ...formData, clientId: newClient.id });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,19 +101,34 @@ export function CreateProjectDialog({
       return;
     }
 
+    if (!formData.clientId) {
+      setError('Client is required');
+      return;
+    }
+
     try {
       setLoading(true);
       const projectService = ProjectService.getInstance(db);
 
+      // Obtener el cliente seleccionado si existe
+      const selectedClient = formData.clientId 
+        ? clients.find(c => c.id === formData.clientId)
+        : undefined;
+
+      // Construir objeto con todos los campos
       const projectData = {
         name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
+        description: formData.description.trim() || '',
         color: formData.color,
+        clientId: formData.clientId,
+        clientName: selectedClient!.name,
         members: [userId],
         ownerId: userId,
-        owner_id: userId,
         isArchived: false,
-        budget: formData.budget ? parseInt(formData.budget) : undefined,
+        budget: formData.budget && !isNaN(parseFloat(formData.budget)) ? parseFloat(formData.budget) : null,
+        hourlyRate: formData.hourlyRate && !isNaN(parseFloat(formData.hourlyRate)) ? parseFloat(formData.hourlyRate) : null,
+        estimatedTime: formData.estimatedTime.trim() || '',
+        userRoles: { [userId]: 'owner' },
       };
 
       const projectId = await projectService.createProject(projectData);
@@ -78,15 +136,20 @@ export function CreateProjectDialog({
       // Crear el objeto de proyecto completo para el callback
       const createdProject: Project = {
         id: projectId,
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        color: formData.color,
-        members: [userId],
-        ownerId: userId,
-        owner_id: userId,
-        isArchived: false,
-        budget: formData.budget ? parseInt(formData.budget) : undefined,
+        name: projectData.name,
+        description: projectData.description,
+        color: projectData.color,
+        clientId: projectData.clientId,
+        clientName: projectData.clientName,
+        members: projectData.members,
+        ownerId: projectData.ownerId,
+        isArchived: projectData.isArchived,
+        budget: projectData.budget,
+        hourlyRate: projectData.hourlyRate,
+        estimatedTime: projectData.estimatedTime,
+        userRoles: projectData.userRoles,
         createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       onProjectCreated(createdProject);
@@ -96,7 +159,10 @@ export function CreateProjectDialog({
         name: '',
         description: '',
         color: COLORS[4],
+        clientId: '',
         budget: '',
+        hourlyRate: '',
+        estimatedTime: '',
       });
 
       setOpen(false);
@@ -110,12 +176,14 @@ export function CreateProjectDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Project
-        </Button>
+        {children || (
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            New Project
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create New Project</DialogTitle>
         </DialogHeader>
@@ -173,6 +241,50 @@ export function CreateProjectDialog({
             </div>
           </div>
 
+          {/* Client Name */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="clientId">Client *</Label>
+              <CreateClientDialog
+                userId={userId}
+                onClientSaved={handleClientCreated}
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-xs text-primary hover:text-primary/80"
+                  disabled={loading}
+                >
+                  <UserPlus className="h-3 w-3 mr-1" />
+                  New Client
+                </Button>
+              </CreateClientDialog>
+            </div>
+            <Select
+              value={formData.clientId}
+              onValueChange={(value) => setFormData({ ...formData, clientId: value })}
+              disabled={loading || loadingClients}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={loadingClients ? "Loading clients..." : "Select a client"} />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                    No clients yet. Create one to get started.
+                  </div>
+                ) : (
+                  clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Budget */}
           <div className="space-y-2">
             <Label htmlFor="budget">Budget (Optional)</Label>
@@ -181,6 +293,7 @@ export function CreateProjectDialog({
               <Input
                 id="budget"
                 type="number"
+                step="0.01"
                 placeholder="0.00"
                 className="pl-7"
                 value={formData.budget}
@@ -188,6 +301,36 @@ export function CreateProjectDialog({
                 disabled={loading}
               />
             </div>
+          </div>
+
+          {/* Hourly Rate */}
+          <div className="space-y-2">
+            <Label htmlFor="hourlyRate">Hourly Rate (Optional)</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-muted-foreground">$/h</span>
+              <Input
+                id="hourlyRate"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                className="pl-10"
+                value={formData.hourlyRate}
+                onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          {/* Estimated Time */}
+          <div className="space-y-2">
+            <Label htmlFor="estimatedTime">Estimated Time (Optional)</Label>
+            <Input
+              id="estimatedTime"
+              placeholder="e.g. 40h, 2 weeks, 3 months"
+              value={formData.estimatedTime}
+              onChange={(e) => setFormData({ ...formData, estimatedTime: e.target.value })}
+              disabled={loading}
+            />
           </div>
 
           {/* Submit Button */}

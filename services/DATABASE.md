@@ -73,10 +73,10 @@ Almacena los datos de los usuarios registrados. Se crea automáticamente cuando 
   "estimatedTime": "string - Tiempo estimado",
   "isArchived": "boolean - Estado de archivo (default: false)",
   "ownerId": "string - UID del propietario",
-  "owner_id": "string - UID del propietario (compatibilidad)",
   "members": "array<string> - UIDs de los miembros",
   "userRoles": "map<string, string> - UID: role (admin, member, viewer)",
-  "createdAt": "timestamp - Fecha de creación"
+  "createdAt": "timestamp - Fecha de creación",
+  "updatedAt": "timestamp - Fecha de última actualización"
 }
 ```
 
@@ -94,13 +94,13 @@ Almacena los datos de los usuarios registrados. Se crea automáticamente cuando 
   "estimatedTime": "160h",
   "isArchived": false,
   "ownerId": "aB1cD2eF3gH4iJ5kL6mN7oP8",
-  "owner_id": "aB1cD2eF3gH4iJ5kL6mN7oP8",
   "members": ["aB1cD2eF3gH4iJ5kL6mN7oP8", "xYz987WvU654"],
   "userRoles": {
     "aB1cD2eF3gH4iJ5kL6mN7oP8": "admin",
     "xYz987WvU654": "member"
   },
-  "createdAt": "2026-02-15T10:30:00Z"
+  "createdAt": "2026-02-15T10:30:00Z",
+  "updatedAt": "2026-02-16T08:45:00Z"
 }
 ```
 
@@ -358,8 +358,7 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow read: if isAuthenticated() && 
         (request.auth.uid in resource.data.members ||
-         request.auth.uid == resource.data.ownerId ||
-         request.auth.uid == resource.data.owner_id);
+         request.auth.uid == resource.data.ownerId);
       allow create: if isAuthenticated();
       allow update, delete: if isOwner(resource.data.ownerId);
     }

@@ -25,13 +25,16 @@ export interface Project {
   description?: string;
   color: string;
   members?: string[];
-  ownerId?: string;
-  owner_id?: string;
-  clientId?: string;
+  ownerId: string;
+  clientId: string;
+  clientName: string;
+  hourlyRate?: number | null;
   estimatedTime?: string;
   isArchived: boolean;
-  budget?: number;
+  budget?: number | null;
+  userRoles?: Record<string, string>;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 export class ProjectService extends BaseService {
@@ -61,7 +64,6 @@ export class ProjectService extends BaseService {
       const queries = [
         query(projectsRef, where('members', 'array-contains', userId)),
         query(projectsRef, where('ownerId', '==', userId)),
-        query(projectsRef, where('owner_id', '==', userId)),
       ];
 
       const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
@@ -73,16 +75,19 @@ export class ProjectService extends BaseService {
           projectMap.set(doc.id, {
             id: doc.id,
             name: data.name,
-            description: data.description,
+            description: data.description || '',
             color: data.color,
             members: data.members || [],
             ownerId: data.ownerId,
-            owner_id: data.owner_id,
-            clientId: data.clientId,
-            estimatedTime: data.estimatedTime,
+            clientId: data.clientId || '',
+            clientName: data.clientName || 'No Client',
+            hourlyRate: data.hourlyRate ?? null,
+            estimatedTime: data.estimatedTime || '',
             isArchived: data.isArchived || false,
-            budget: data.budget,
+            budget: data.budget ?? null,
+            userRoles: data.userRoles,
             createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate(),
           });
         });
       });
@@ -98,12 +103,13 @@ export class ProjectService extends BaseService {
  * Crea un nuevo proyecto
  * @param data - Datos del proyecto
  */
-  public async createProject(data: Omit<Project, 'id' | 'createdAt'>): Promise<string> {
+  public async createProject(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
       const projectsRef = collection(this.db, this.collectionName);
       const projectData = {
         ...data,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         isArchived: data.isArchived || false,
       };
       
@@ -132,14 +138,19 @@ export class ProjectService extends BaseService {
       return {
         id: snapshot.id,
         name: data.name,
-        description: data.description,
+        description: data.description || '',
         color: data.color,
         members: data.members || [],
-        clientId: data.clientId,
-        estimatedTime: data.estimatedTime,
+        ownerId: data.ownerId,
+        clientId: data.clientId || '',
+        clientName: data.clientName || 'No Client',
+        hourlyRate: data.hourlyRate ?? null,
+        estimatedTime: data.estimatedTime || '',
         isArchived: data.isArchived || false,
-        budget: data.budget,
+        budget: data.budget ?? null,
+        userRoles: data.userRoles,
         createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate(),
       };
     } catch (error: any) {
       console.error('Error al obtener proyecto:', error);
@@ -156,6 +167,7 @@ export class ProjectService extends BaseService {
       const projectRef = doc(this.db, this.collectionName, projectId);
       await updateDoc(projectRef, {
         isArchived: true,
+        updatedAt: serverTimestamp(),
       });
     } catch (error: any) {
       console.error('Error al archivar proyecto:', error);
@@ -173,10 +185,9 @@ export class ProjectService extends BaseService {
       const queries = [
         query(projectsRef, where('members', 'array-contains', userId)),
         query(projectsRef, where('ownerId', '==', userId)),
-        query(projectsRef, where('owner_id', '==', userId)),
       ];
 
-      const sources: Project[][] = [[], [], []];
+      const sources: Project[][] = [[], []];
       const emit = () => {
         const projectMap = new Map<string, Project>();
         sources.flat().forEach((project) => {
@@ -195,16 +206,19 @@ export class ProjectService extends BaseService {
               projects.push({
                 id: doc.id,
                 name: data.name,
-                description: data.description,
+                description: data.description || '',
                 color: data.color,
                 members: data.members || [],
                 ownerId: data.ownerId,
-                owner_id: data.owner_id,
-                clientId: data.clientId,
-                estimatedTime: data.estimatedTime,
+                clientId: data.clientId || '',
+                clientName: data.clientName || 'No Client',
+                hourlyRate: data.hourlyRate ?? null,
+                estimatedTime: data.estimatedTime || '',
                 isArchived: data.isArchived || false,
-                budget: data.budget,
+                budget: data.budget ?? null,
+                userRoles: data.userRoles,
                 createdAt: data.createdAt?.toDate() || new Date(),
+                updatedAt: data.updatedAt?.toDate(),
               });
             });
             sources[index] = projects;
@@ -233,9 +247,12 @@ export class ProjectService extends BaseService {
       const projectRef = doc(this.db, this.collectionName, projectId);
       
       // Eliminar campos que no deben actualizarse
-      const { id, createdAt, ...updateData } = updates as any;
+      const { id, createdAt, updatedAt, ...updateData } = updates as any;
       
-      await updateDoc(projectRef, updateData);
+      await updateDoc(projectRef, {
+        ...updateData,
+        updatedAt: serverTimestamp(),
+      });
     } catch (error: any) {
       console.error('Error al actualizar proyecto:', error);
       throw new Error(`Error al actualizar proyecto: ${error.message}`);

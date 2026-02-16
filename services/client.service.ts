@@ -14,7 +14,8 @@ import {
   deleteDoc, 
   query, 
   where,
-  onSnapshot
+  onSnapshot,
+  serverTimestamp
 } from 'firebase/firestore';
 
 export interface Client {
@@ -74,7 +75,12 @@ export class ClientService extends BaseService {
   public async createClient(data: Omit<Client, 'id'>): Promise<string> {
     try {
       const clientsRef = collection(this.db, this.collectionName);
-      const docRef = await addDoc(clientsRef, data);
+      const clientData = {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      const docRef = await addDoc(clientsRef, clientData);
       return docRef.id;
     } catch (error: any) {
       console.error('Error al crear cliente:', error);

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { useAuth, useProjects } from "@/hooks"
+import { CreateProjectDialog } from "@/components/create-project-dialog"
 import {
     Sidebar,
     SidebarContent,
@@ -72,6 +73,11 @@ const mainMenuItems = [
         url: "/app/project",
         icon: FolderKanban,
     },
+    {
+        title: "Clients",
+        url: "/app/clients",
+        icon: User2,
+    }
 ]
 
 export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -216,12 +222,15 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem>
-                                <SidebarMenuButton asChild tooltip="New Project">
-                                    <Link href="/app/project/new">
+                                <CreateProjectDialog 
+                                    userId={user?.uid || ''}
+                                    onProjectCreated={() => {}}
+                                >
+                                    <SidebarMenuButton tooltip="New Project">
                                         <Plus />
                                         <span>New Project</span>
-                                    </Link>
-                                </SidebarMenuButton>
+                                    </SidebarMenuButton>
+                                </CreateProjectDialog>
                             </SidebarMenuItem>
                         </SidebarMenu>
                     </SidebarGroupContent>
