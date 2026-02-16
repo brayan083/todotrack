@@ -1,0 +1,263 @@
+/**
+ * CreateTaskDialog - Diálogo para crear nuevas tareas
+ */
+
+"use client";
+
+import React, { useState } from 'react';
+import { Plus, Loader2, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { TaskService, type Task } from '@/services';
+import { db } from '@/lib/firebase.config';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
+const PRIORITIES = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+];
+
+const STATUSES = [
+  { value: 'todo', label: 'To Do' },
+  { value: 'in-progress', label: 'In Progress' },
+  { value: 'done', label: 'Done' },
+];
+
+interface CreateTaskDialogProps {
+  projectId: string;
+  userId: string;
+  assignees?: { uid: string; label: string; photoURL?: string | null }[];
+  onTaskCreated: (task: Task) => void;
+}
+
+export function CreateTaskDialog({
+  projectId,
+  userId,
+  assignees = [],
+  onTaskCreated,
+}: CreateTaskDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium',
+    status: 'todo',
+    assignedId: assignees.length > 0 ? assignees[0].uid : userId,
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!formData.title.trim()) {
+      setError('Task title is required');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const taskService = TaskService.getInstance(db);
+
+      const newTask: Omit<Task, 'id' | 'createdAt'> = {
+        projectId,
+        title: formData.title.trim(),
+        description: formData.description.trim() || undefined,
+        status: formData.status,
+        priority: formData.priority,
+        assignedId: formData.assignedId || userId,
+      };
+
+      const taskId = await taskService.createTask(newTask);
+      
+      // Crear el objeto de tarea completo para el callback
+      const createdTask: Task = {
+        id: taskId,
+        ...newTask,
+        createdAt: new Date(),
+      };
+
+      onTaskCreated(createdTask);
+      
+      // Reset form
+      setFormData({
+        title: '',
+        description: '',
+        priority: 'medium',
+        status: 'todo',
+        assignedId: assignees.length > 0 ? assignees[0].uid : userId,
+      });
+      
+      setOpen(false);
+    } catch (err: any) {
+      setError(err.message || 'Error creating task');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="gap-2">
+          <Plus className="h-4 w-4" />
+          New Task
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create New Task</DialogTitle>
+        </DialogHeader>
+
+        {error && (
+          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-2 items-start">
+            <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Title */}
+          <div className="space-y-2">
+            <Label htmlFor="title">Task Title *</Label>
+            <Input
+              id="title"
+              placeholder="Enter task title..."
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <textarea
+              id="description"
+              placeholder="Enter task description..."
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+              rows={3}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Priority */}
+          <div className="space-y-2">
+            <Label htmlFor="priority">Priority</Label>
+            <Select value={formData.priority} onValueChange={(value) => setFormData({ ...formData, priority: value })}>
+              <SelectTrigger id="priority" disabled={loading}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITIES.map((priority) => (
+                  <SelectItem key={priority.value} value={priority.value}>
+                    {priority.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-2">
+            <Label htmlFor="status">Status</Label>
+            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+              <SelectTrigger id="status" disabled={loading}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUSES.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Assignee */}
+          <div className="space-y-2">
+            <Label htmlFor="assignee">Assignee</Label>
+            <Select
+              value={formData.assignedId}
+              onValueChange={(value) => setFormData({ ...formData, assignedId: value })}
+            >
+              <SelectTrigger id="assignee" disabled={loading}>
+                <SelectValue>
+                  {(() => {
+                    const selected = (assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }]).find(
+                      (a) => a.uid === formData.assignedId
+                    );
+                    if (!selected) return null;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-5 w-5">
+                          {selected.photoURL && <AvatarImage src={selected.photoURL} />}
+                          <AvatarFallback className="text-xs">
+                            {selected.label.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span>{selected.label}</span>
+                      </div>
+                    );
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }]).map((assignee) => (
+                  <SelectItem key={assignee.uid} value={assignee.uid}>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-5 w-5">
+                        {assignee.photoURL && <AvatarImage src={assignee.photoURL} />}
+                        <AvatarFallback className="text-xs">
+                          {assignee.label.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{assignee.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              'Create Task'
+            )}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

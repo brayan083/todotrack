@@ -1,0 +1,41 @@
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+/**
+ * Middleware para proteger rutas
+ * Redirige a /login si el usuario no está autenticado
+ */
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Rutas públicas que no requieren autenticación
+  const publicRoutes = ['/', '/login', '/register'];
+  
+  // Rutas protegidas que requieren autenticación
+  const protectedRoutes = ['/app'];
+
+  // Si es una ruta protegida, verificar si hay token
+  if (protectedRoutes.some(route => pathname.startsWith(route))) {
+    // Verificar si hay un token en las cookies o localStorage
+    // Por ahora, Firebase Auth maneja esto directamente en el cliente
+    // Este middleware es principalmente para redirecciones básicas
+  }
+
+  // Redirigir usuarios autenticados que intenten acceder a login/register
+  // Esto se maneja mejor en el cliente con useEffect
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+};

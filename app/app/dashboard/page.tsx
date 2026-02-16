@@ -102,7 +102,7 @@ const Dashboard: React.FC = () => {
             <CardTitle className="text-sm font-medium text-muted-foreground">Productivity Trend</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-24 w-full">
+            <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={productivityData}>
                   <Tooltip 
