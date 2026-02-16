@@ -148,12 +148,6 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                                 <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
                             </CollapsibleTrigger>
                         </SidebarGroupLabel>
-                        <SidebarGroupAction asChild>
-                            <Link href="/app/project/new" title="New Project">
-                                <Plus />
-                                <span className="sr-only">New Project</span>
-                            </Link>
-                        </SidebarGroupAction>
                         <CollapsibleContent>
                             <SidebarGroupContent>
                                 <SidebarMenu>

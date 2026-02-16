@@ -6,15 +6,16 @@
 import { BaseService } from './base.service';
 import { Firestore, setDoc, getDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { User } from 'firebase/auth';
+import { getUserLocationDefaults } from '@/lib/geolocation';
 
 export interface UserData {
   uid: string;
   email: string;
-  displayName: string | null;
-  photoURL: string | null;
+  displayName: string;
+  photoURL: string;
+  timezone: string;
+  currency: string;
   createdAt: any;
-  updatedAt: any;
-  provider?: string; // 'email', 'google', etc
 }
 
 export class UserService extends BaseService {
@@ -36,19 +37,27 @@ export class UserService extends BaseService {
 
   /**
    * Guarda o actualiza un usuario en Firestore
+   * Asegura que todos los campos requeridos se creen, aunque estén vacíos
+   * Detecta automáticamente timezone y currency del usuario
    */
   public async saveUser(user: User, provider: string = 'email'): Promise<void> {
     try {
       const userDocRef = this.getDocRef('users', user.uid);
       
+      // Obtener el usuario existente para verificar si es la primera vez
+      const existingUser = await getDoc(userDocRef);
+      
+      // Obtener ubicación por defecto solo en la primera creación
+      const defaults = getUserLocationDefaults();
+      
       const userData: UserData = {
         uid: user.uid,
         email: user.email || '',
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        provider: provider,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        timezone: existingUser.exists() ? existingUser.data()?.timezone || defaults.timezone : defaults.timezone,
+        currency: existingUser.exists() ? existingUser.data()?.currency || defaults.currency : defaults.currency,
+        createdAt: existingUser.exists() ? existingUser.data()?.createdAt : serverTimestamp(),
       };
 
       // Usar setDoc con merge para no sobrescribir si ya existe
@@ -84,10 +93,7 @@ export class UserService extends BaseService {
     try {
       const userDocRef = this.getDocRef('users', uid);
       
-      await updateDoc(userDocRef, {
-        ...userData,
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(userDocRef, userData);
     } catch (error: any) {
       console.error('Error al actualizar usuario:', error);
       throw new Error(`Error al actualizar usuario: ${error.message}`);

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { CreateProjectDialog } from '@/components/create-project-dialog';
 import { useAuthStore } from '@/stores';
 import { ProjectService, type Project } from '@/services/project.service';
 import { db } from '@/lib/firebase.config';
@@ -43,7 +44,11 @@ const ProjectsPage: React.FC = () => {
   );
 
   const handleProjectClick = (projectId: string) => {
-    router.push(`/app/project/${projectId}/kanban`);
+    router.push(`/app/project/${projectId}`);
+  };
+
+  const handleProjectCreated = (newProject: Project) => {
+    setProjects([...projects, newProject]);
   };
 
   return (
@@ -57,13 +62,12 @@ const ProjectsPage: React.FC = () => {
               {filteredProjects.length} {filteredProjects.length === 1 ? 'project' : 'projects'}
             </p>
           </div>
-          <Button 
-            onClick={() => router.push('/app/project/new')}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Project
-          </Button>
+          {user && (
+            <CreateProjectDialog
+              userId={user.uid}
+              onProjectCreated={handleProjectCreated}
+            />
+          )}
         </div>
 
         {/* Search Bar */}
@@ -98,14 +102,11 @@ const ProjectsPage: React.FC = () => {
                 ? 'Create your first project to get started'
                 : 'No projects match your search'}
             </p>
-            {projects.length === 0 && (
-              <Button 
-                onClick={() => router.push('/app/project/new')}
-                className="gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Create Project
-              </Button>
+            {projects.length === 0 && user && (
+              <CreateProjectDialog
+                userId={user.uid}
+                onProjectCreated={handleProjectCreated}
+              />
             )}
           </div>
         ) : (

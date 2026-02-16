@@ -11,12 +11,10 @@ Almacena los datos de los usuarios registrados. Se crea automáticamente cuando 
   "uid": "string - ID único de Firebase Auth",
   "displayName": "string - Nombre mostrado",
   "email": "string - Correo electrónico del usuario",
-  "photoURL": "string | null - URL de la foto",
-  "timezone": "string - Zona horaria del usuario",
-  "currency": "string - Moneda preferida (Ej: USD, EUR)",
-  "provider": "string - Método de autenticación (email, google)",
-  "createdAt": "timestamp - Fecha de creación",
-  "updatedAt": "timestamp - Fecha de última actualización"
+  "photoURL": "string - URL de la foto (vacío si no tiene)",
+  "timezone": "string - Zona horaria del usuario (detectada automáticamente por región)",
+  "currency": "string - Moneda preferida (USD por defecto, o la de su región)",
+  "createdAt": "timestamp - Fecha de creación"
 }
 ```
 
@@ -29,9 +27,7 @@ Almacena los datos de los usuarios registrados. Se crea automáticamente cuando 
   "photoURL": "https://lh3.googleusercontent.com/...",
   "timezone": "America/Mexico_City",
   "currency": "MXN",
-  "provider": "google",
-  "createdAt": "2026-02-15T10:30:00Z",
-  "updatedAt": "2026-02-15T10:30:00Z"
+  "createdAt": "2026-02-15T10:30:00Z"
 }
 ```
 
