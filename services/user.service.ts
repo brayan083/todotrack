@@ -4,7 +4,7 @@
  */
 
 import { BaseService } from './base.service';
-import { Firestore, setDoc, getDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { Firestore, setDoc, getDoc, updateDoc, doc, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { getUserLocationDefaults } from '@/lib/geolocation';
 
@@ -109,6 +109,27 @@ export class UserService extends BaseService {
       return user !== null;
     } catch (error) {
       return false;
+    }
+  }
+
+  /**
+   * Busca un usuario por email
+   */
+  public async getUserByEmail(email: string): Promise<UserData | null> {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const usersRef = collection(this.db, this.collectionName);
+      const usersQuery = query(usersRef, where('email', '==', normalizedEmail));
+      const snapshot = await getDocs(usersQuery);
+
+      if (snapshot.empty) {
+        return null;
+      }
+
+      return snapshot.docs[0].data() as UserData;
+    } catch (error: any) {
+      console.error('Error al buscar usuario por email:', error);
+      throw new Error(`Error al buscar usuario por email: ${error.message}`);
     }
   }
 }

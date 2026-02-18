@@ -124,7 +124,7 @@ const Register: React.FC = () => {
           <Link href="/" className="mx-auto h-12 w-12 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
             <Code className="text-white h-6 w-6" />
           </Link>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-foreground">Start shipping with TodoTrack</h2>
+          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-foreground">Start shipping with TimeTrack</h2>
           <p className="mt-2 text-center text-sm text-muted-foreground">Project management built for developers.</p>
         </div>
 

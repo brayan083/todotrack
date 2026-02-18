@@ -1,5 +1,5 @@
 {
-  "name": "todotrack",
+  "name": "TimeTrack",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

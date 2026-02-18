@@ -4,8 +4,11 @@ import { AuthProvider } from '@/components/auth-provider';
 
 
 export const metadata: Metadata = {
-  title: 'TodoTrack',
+  title: 'TimeTrack',
   description: 'Productivity tracking application',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

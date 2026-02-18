@@ -50,6 +50,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import Image from "next/image"
+import { canManageProject, getUserRole } from "@/lib/roles"
 
 // Menu items principales
 const mainMenuItems = [
@@ -57,11 +58,6 @@ const mainMenuItems = [
         title: "Dashboard",
         url: "/app/dashboard",
         icon: LayoutDashboard,
-    },
-    {
-        title: "Kanban",
-        url: "/app/kanban",
-        icon: KanbanSquare,
     },
     {
         title: "Timesheet",
@@ -83,7 +79,16 @@ const mainMenuItems = [
 export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const pathname = usePathname()
     const { user, logout } = useAuth()
-    const { projects, loading: projectsLoading } = useProjects()
+    const { projects, loading: projectsLoading, leaveProject } = useProjects()
+
+    const handleLeaveProject = async (projectId: string) => {
+        if (!user) return
+
+        const confirmed = window.confirm('Are you sure you want to leave this project?')
+        if (!confirmed) return
+
+        await leaveProject(projectId, user.uid)
+    }
 
     return (
         <Sidebar collapsible="icon" {...props}>
@@ -97,7 +102,7 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                                         <KanbanSquare className="size-4" />
                                     </div>
                                     <div className="grid flex-1 text-left text-sm leading-tight">
-                                        <span className="truncate font-semibold">TodoTrack</span>
+                                        <span className="truncate font-semibold">TimeTrack</span>
                                         <span className="truncate text-xs">Task Management</span>
                                     </div>
                                     <ChevronDown className="ml-auto size-4 opacity-60" />
@@ -173,12 +178,20 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                                         </SidebarMenuItem>
                                     ) : (
                                         // Projects list
-                                        projects.map((project) => (
+                                        projects.map((project) => {
+                                            const role = getUserRole(project, user?.uid)
+                                            const canManage = canManageProject(role)
+                                            const canLeaveProject = Boolean(user && project.ownerId !== user.uid)
+
+                                            return (
                                             <SidebarMenuItem key={project.id}>
                                                 <SidebarMenuButton asChild isActive={pathname === `/app/project/${project.id}`}>
                                                     <Link href={`/app/project/${project.id}`}>
                                                         <FolderKanban />
-                                                        <span>{project.name}</span>
+                                                        <span className="flex-1 truncate">{project.name}</span>
+                                                        {user && project.ownerId !== user.uid && (
+                                                            <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" />
+                                                        )}
                                                     </Link>
                                                 </SidebarMenuButton>
                                                 <DropdownMenu>
@@ -199,16 +212,29 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                                                                 <span>Kanban Board</span>
                                                             </Link>
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem>
-                                                            <span>Edit Project</span>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem className="text-destructive">
-                                                            <span>Delete Project</span>
-                                                        </DropdownMenuItem>
+                                                        {canManage && (
+                                                            <DropdownMenuItem>
+                                                                <span>Edit Project</span>
+                                                            </DropdownMenuItem>
+                                                        )}
+                                                        {canManage && (
+                                                            <DropdownMenuItem className="text-destructive">
+                                                                <span>Delete Project</span>
+                                                            </DropdownMenuItem>
+                                                        )}
+                                                        {canLeaveProject && (
+                                                            <DropdownMenuItem
+                                                                className="text-destructive"
+                                                                onClick={() => handleLeaveProject(project.id)}
+                                                            >
+                                                                <span>Leave Project</span>
+                                                            </DropdownMenuItem>
+                                                        )}
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             </SidebarMenuItem>
-                                        ))
+                                            )
+                                        })
                                     )}
                                 </SidebarMenu>
                             </SidebarGroupContent>

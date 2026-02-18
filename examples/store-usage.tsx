@@ -101,19 +101,22 @@ export function TimerWidget() {
   const { activeEntry, elapsedSeconds, isRunning, startTimer, stopTimer } = useTimer();
   const formattedTime = useFormattedTime(elapsedSeconds);
   const { tasks } = useTasks();
+  const { projects } = useProjects();
 
   // Encontrar la tarea asociada al timer activo
   const activeTask = activeEntry ? tasks.find(t => t.id === activeEntry.taskId) : null;
 
   const handleStart = async () => {
-    // En un caso real, deberías seleccionar la tarea desde un modal o dropdown
-    const taskId = tasks[0]?.id;
-    if (taskId) {
-      try {
-        await startTimer(taskId);
-      } catch (error) {
-        console.error('Error al iniciar timer:', error);
-      }
+    // En un caso real, deberias seleccionar el proyecto y la tarea desde un modal
+    const projectId = projects[0]?.id;
+    const taskId = tasks.find((task) => task.projectId === projectId)?.id;
+    if (!projectId) {
+      return;
+    }
+    try {
+      await startTimer({ projectId, taskId: taskId || null });
+    } catch (error) {
+      console.error('Error al iniciar timer:', error);
     }
   };
 
@@ -176,6 +179,9 @@ export function ProjectsList() {
         description: 'Descripción del proyecto',
         color: '#3B82F6',
         members: [],
+        ownerId: 'current-user-id', // En producción, obtener del usuario actual
+        clientId: 'default-client-id', // En producción, seleccionar del diálogo
+        clientName: 'Cliente Ejemplo', // En producción, obtener del cliente seleccionado
         isArchived: false,
       });
     } catch (error) {
@@ -263,7 +269,8 @@ export function SimpleKanban() {
         projectId: 'default-project', // En producción, obtener del contexto
         title: 'Nueva Tarea',
         status,
-        assignedId: 'current-user-id', // En producción, obtener del user actual
+        assigneeId: 'current-user-id', // En producción, obtener del user actual
+        position: 0, // En producción, calcular basado en tareas existentes
         priority: 'medium',
       });
     } catch (error) {

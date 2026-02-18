@@ -237,6 +237,6 @@ const menuItems = [
 
 ## 🎉 ¡Listo para Usar!
 
-El sidebar está completamente implementado y listo para ser usado en tu aplicación TodoTrack. Solo necesitas actualizar el layout como se muestra en el Paso 1 y empezar a usarlo.
+El sidebar está completamente implementado y listo para ser usado en tu aplicación TimeTrack. Solo necesitas actualizar el layout como se muestra en el Paso 1 y empezar a usarlo.
 
 Para cualquier pregunta o personalización adicional, consulta la documentación completa en `components/ui/sidebar/README.md`.

@@ -116,7 +116,7 @@ Almacena los datos de los usuarios registrados. Se crea automáticamente cuando 
   "description": "string - Descripción detallada",
   "status": "string - Estado (todo, in-progress, done)",
   "priority": "string - Prioridad (low, medium, high, urgent)",
-  "assignedId": "string - UID del responsable",
+  "assigneeId": "string - UID del responsable",
   "position": "number - Orden en el tablero Kanban",
   "dueDate": "timestamp - Fecha límite",
   "subtasks": "array<object> - Lista de subtareas",
@@ -157,7 +157,7 @@ Almacena los datos de los usuarios registrados. Se crea automáticamente cuando 
   "description": "Crear mockups y prototipos de la página principal",
   "status": "in-progress",
   "priority": "high",
-  "assignedId": "xYz987WvU654",
+  "assigneeId": "xYz987WvU654",
   "position": 1,
   "dueDate": "2026-02-20T23:59:59Z",
   "subtasks": [

@@ -5,6 +5,7 @@
 
 import { BaseService } from './base.service';
 import { Observable } from 'rxjs';
+import { normalizeProjectRole, type ProjectRole } from '@/lib/roles';
 import { 
   collection, 
   doc, 
@@ -16,7 +17,9 @@ import {
   query, 
   where,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  arrayRemove,
+  deleteField
 } from 'firebase/firestore';
 
 export interface Project {
@@ -26,13 +29,13 @@ export interface Project {
   color: string;
   members?: string[];
   ownerId: string;
-  clientId: string;
-  clientName: string;
+  clientId?: string;
+  clientName?: string;
   hourlyRate?: number | null;
   estimatedTime?: string;
   isArchived: boolean;
   budget?: number | null;
-  userRoles?: Record<string, string>;
+  userRoles?: Record<string, ProjectRole>;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -79,8 +82,8 @@ export class ProjectService extends BaseService {
             color: data.color,
             members: data.members || [],
             ownerId: data.ownerId,
-            clientId: data.clientId || '',
-            clientName: data.clientName || 'No Client',
+            clientId: data.clientId || undefined,
+            clientName: data.clientName || undefined,
             hourlyRate: data.hourlyRate ?? null,
             estimatedTime: data.estimatedTime || '',
             isArchived: data.isArchived || false,
@@ -142,8 +145,8 @@ export class ProjectService extends BaseService {
         color: data.color,
         members: data.members || [],
         ownerId: data.ownerId,
-        clientId: data.clientId || '',
-        clientName: data.clientName || 'No Client',
+        clientId: data.clientId || undefined,
+        clientName: data.clientName || undefined,
         hourlyRate: data.hourlyRate ?? null,
         estimatedTime: data.estimatedTime || '',
         isArchived: data.isArchived || false,
@@ -210,8 +213,8 @@ export class ProjectService extends BaseService {
                 color: data.color,
                 members: data.members || [],
                 ownerId: data.ownerId,
-                clientId: data.clientId || '',
-                clientName: data.clientName || 'No Client',
+                clientId: data.clientId || undefined,
+                clientName: data.clientName || undefined,
                 hourlyRate: data.hourlyRate ?? null,
                 estimatedTime: data.estimatedTime || '',
                 isArchived: data.isArchived || false,
@@ -270,6 +273,61 @@ export class ProjectService extends BaseService {
     } catch (error: any) {
       console.error('Error al eliminar proyecto:', error);
       throw new Error(`Error al eliminar proyecto: ${error.message}`);
+    }
+  }
+
+  /**
+   * Permite a un usuario salir de un proyecto
+   */
+  public async leaveProject(projectId: string, userId: string): Promise<void> {
+    try {
+      const projectRef = doc(this.db, this.collectionName, projectId);
+      await updateDoc(projectRef, {
+        members: arrayRemove(userId),
+        [`userRoles.${userId}`]: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      console.error('Error al salir del proyecto:', error);
+      throw new Error(`Error al salir del proyecto: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualiza el rol de un miembro
+   */
+  public async updateMemberRole(
+    projectId: string,
+    memberId: string,
+    role: ProjectRole
+  ): Promise<void> {
+    try {
+      const projectRef = doc(this.db, this.collectionName, projectId);
+      const normalizedRole = normalizeProjectRole(role, { allowOwner: false });
+      await updateDoc(projectRef, {
+        [`userRoles.${memberId}`]: normalizedRole,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      console.error('Error al actualizar rol de miembro:', error);
+      throw new Error(`Error al actualizar rol de miembro: ${error.message}`);
+    }
+  }
+
+  /**
+   * Elimina a un miembro del proyecto
+   */
+  public async removeMember(projectId: string, memberId: string): Promise<void> {
+    try {
+      const projectRef = doc(this.db, this.collectionName, projectId);
+      await updateDoc(projectRef, {
+        members: arrayRemove(memberId),
+        [`userRoles.${memberId}`]: deleteField(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      console.error('Error al eliminar miembro:', error);
+      throw new Error(`Error al eliminar miembro: ${error.message}`);
     }
   }
 }

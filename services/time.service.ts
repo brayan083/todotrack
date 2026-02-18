@@ -18,11 +18,25 @@ import {
 export interface TimeEntry {
   id: string;
   userId: string;
-  taskId: string;
+  projectId: string;
+  taskId?: string | null;
+  description?: string;
   startTime: Date;
   endTime?: Date;
+  duration?: number;
+  entryType: string;
   isManual: boolean;
   isEdited: boolean;
+  originalData?: Record<string, any> | null;
+  tags?: string[];
+}
+
+export interface StartTimerInput {
+  projectId: string;
+  taskId?: string | null;
+  description?: string;
+  entryType?: string;
+  tags?: string[];
 }
 
 export class TimeService extends BaseService {
@@ -47,16 +61,22 @@ export class TimeService extends BaseService {
    * @param userId - ID del usuario
    * @param taskId - ID de la tarea
    */
-  public async startTimer(userId: string, taskId: string): Promise<string> {
+  public async startTimer(userId: string, data: StartTimerInput): Promise<string> {
     try {
       const timeEntriesRef = collection(this.db, this.collectionName);
       const entryData = {
         userId,
-        taskId,
+        projectId: data.projectId,
+        taskId: data.taskId || null,
+        description: data.description || '',
         startTime: serverTimestamp(),
         endTime: null,
+        duration: 0,
+        entryType: data.entryType || 'normal',
         isManual: false,
         isEdited: false,
+        originalData: null,
+        tags: data.tags || [],
       };
       
       const docRef = await addDoc(timeEntriesRef, entryData);
@@ -71,11 +91,12 @@ export class TimeService extends BaseService {
    * Detiene un temporizador
    * @param entryId - ID de la entrada de tiempo
    */
-  public async stopTimer(entryId: string): Promise<void> {
+  public async stopTimer(entryId: string, durationSeconds: number): Promise<void> {
     try {
       const entryRef = doc(this.db, this.collectionName, entryId);
       await updateDoc(entryRef, {
         endTime: serverTimestamp(),
+        duration: durationSeconds,
       });
     } catch (error: any) {
       console.error('Error al detener temporizador:', error);
@@ -101,11 +122,17 @@ export class TimeService extends BaseService {
         entries.push({
           id: doc.id,
           userId: data.userId,
-          taskId: data.taskId,
+          projectId: data.projectId,
+          taskId: data.taskId || null,
+          description: data.description || '',
           startTime: data.startTime?.toDate() || new Date(),
           endTime: data.endTime?.toDate() || undefined,
+          duration: data.duration || 0,
+          entryType: data.entryType || 'normal',
           isManual: data.isManual || false,
           isEdited: data.isEdited || false,
+          originalData: data.originalData || null,
+          tags: data.tags || [],
         });
       });
       

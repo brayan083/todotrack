@@ -13,7 +13,7 @@ const Landing: React.FC = () => {
               <div className="w-8 h-8 rounded bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg">
                 <Clock className="w-5 h-5" />
               </div>
-              <span className="font-bold text-xl tracking-tight text-foreground">TodoTrack</span>
+              <span className="font-bold text-xl tracking-tight text-foreground">TimeTrack</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Características</a>
@@ -70,7 +70,7 @@ const Landing: React.FC = () => {
                   <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
                   <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
                 </div>
-                <div className="mx-auto w-64 h-6 bg-background rounded text-[10px] flex items-center justify-center text-muted-foreground font-mono">app.todotrack.com/dashboard</div>
+                <div className="mx-auto w-64 h-6 bg-background rounded text-[10px] flex items-center justify-center text-muted-foreground font-mono">app.TimeTrack.com/dashboard</div>
               </div>
               <div className="aspect-[16/9] w-full bg-card relative">
                  <img alt="Dashboard Mockup" className="w-full h-full object-cover opacity-90" src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200&h=675&fit=crop" />
@@ -84,7 +84,7 @@ const Landing: React.FC = () => {
       <section className="py-24 relative overflow-hidden" id="benefits">
          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center mb-20">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">¿Por qué elegir TodoTrack?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">¿Por qué elegir TimeTrack?</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">Herramientas diseñadas para que registres tu tiempo sin distracciones y organices tu trabajo de manera efectiva.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -171,7 +171,7 @@ const Landing: React.FC = () => {
 
           <div className="bg-gradient-to-r from-primary/10 to-blue-600/10 border border-primary/20 rounded-2xl p-12 text-center">
             <h3 className="text-2xl font-bold text-foreground mb-4">¿Listo para tomar control de tu tiempo?</h3>
-            <p className="text-muted-foreground mb-8 max-w-xl mx-auto">Únete a miles de profesionales que utilizan TodoTrack para mejorar su productividad.</p>
+            <p className="text-muted-foreground mb-8 max-w-xl mx-auto">Únete a miles de profesionales que utilizan TimeTrack para mejorar su productividad.</p>
             <Button asChild size="lg" className="shadow-lg shadow-primary/25">
               <Link href="/register">
                 Empezar gratis ahora
@@ -190,7 +190,7 @@ const Landing: React.FC = () => {
                 <div className="w-6 h-6 rounded bg-primary flex items-center justify-center text-white font-bold text-xs">
                   <Clock className="w-4 h-4" />
                 </div>
-                <span className="font-bold text-lg text-foreground">TodoTrack</span>
+                <span className="font-bold text-lg text-foreground">TimeTrack</span>
               </div>
               <p className="text-muted-foreground text-sm mb-6 max-w-xs">La herramienta más simple para registrar tiempo, organizar tareas y mejorar tu productividad.</p>
             </div>
@@ -220,7 +220,7 @@ const Landing: React.FC = () => {
             </div>
           </div>
            <div className="border-t border-border pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-muted-foreground">© 2024 TodoTrack. Todos los derechos reservados.</p>
+            <p className="text-sm text-muted-foreground">© 2024 TimeTrack. Todos los derechos reservados.</p>
             <div className="flex gap-6">
               <a href="#" className="text-sm text-muted-foreground hover:text-foreground">Privacidad</a>
               <a href="#" className="text-sm text-muted-foreground hover:text-foreground">Términos</a>

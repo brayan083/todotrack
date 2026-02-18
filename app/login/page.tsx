@@ -76,7 +76,7 @@ const Login: React.FC = () => {
           <Link href="/" className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center mb-4 shadow-lg shadow-primary/30">
             <CheckCircle className="text-white h-8 w-8" />
           </Link>
-          <h1 className="text-3xl font-bold tracking-tight">TodoTrack</h1>
+          <h1 className="text-3xl font-bold tracking-tight">TimeTrack</h1>
           <p className="text-muted-foreground mt-2 text-sm">Manage projects. Track time. Ship code.</p>
         </div>
 

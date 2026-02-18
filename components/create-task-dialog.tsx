@@ -45,6 +45,7 @@ interface CreateTaskDialogProps {
   userId: string;
   assignees?: { uid: string; label: string; photoURL?: string | null }[];
   onTaskCreated: (task: Task) => void;
+  disabled?: boolean;
 }
 
 export function CreateTaskDialog({
@@ -52,6 +53,7 @@ export function CreateTaskDialog({
   userId,
   assignees = [],
   onTaskCreated,
+  disabled = false,
 }: CreateTaskDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,7 +63,8 @@ export function CreateTaskDialog({
     description: '',
     priority: 'medium',
     status: 'todo',
-    assignedId: assignees.length > 0 ? assignees[0].uid : userId,
+    assigneeId: assignees.length > 0 ? assignees[0].uid : userId,
+    dueDate: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,13 +80,21 @@ export function CreateTaskDialog({
       setLoading(true);
       const taskService = TaskService.getInstance(db);
 
+      // Obtener todas las tareas del proyecto para calcular la posición
+      const existingTasks = await taskService.getAllTasks(userId, projectId);
+      const maxPosition = existingTasks.length > 0 
+        ? Math.max(...existingTasks.map(t => t.position || 0))
+        : 0;
+
       const newTask: Omit<Task, 'id' | 'createdAt'> = {
         projectId,
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
         status: formData.status,
+        assigneeId: formData.assigneeId || userId,
+        position: maxPosition + 1,
+        dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
         priority: formData.priority,
-        assignedId: formData.assignedId || userId,
       };
 
       const taskId = await taskService.createTask(newTask);
@@ -103,7 +114,8 @@ export function CreateTaskDialog({
         description: '',
         priority: 'medium',
         status: 'todo',
-        assignedId: assignees.length > 0 ? assignees[0].uid : userId,
+        assigneeId: assignees.length > 0 ? assignees[0].uid : userId,
+        dueDate: '',
       });
       
       setOpen(false);
@@ -114,10 +126,15 @@ export function CreateTaskDialog({
     }
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (disabled) return;
+    setOpen(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
+        <Button className="gap-2" disabled={disabled}>
           <Plus className="h-4 w-4" />
           New Task
         </Button>
@@ -199,14 +216,14 @@ export function CreateTaskDialog({
           <div className="space-y-2">
             <Label htmlFor="assignee">Assignee</Label>
             <Select
-              value={formData.assignedId}
-              onValueChange={(value) => setFormData({ ...formData, assignedId: value })}
+              value={formData.assigneeId}
+              onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
             >
               <SelectTrigger id="assignee" disabled={loading}>
                 <SelectValue>
                   {(() => {
                     const selected = (assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }]).find(
-                      (a) => a.uid === formData.assignedId
+                      (a) => a.uid === formData.assigneeId
                     );
                     if (!selected) return null;
                     return (
@@ -239,6 +256,18 @@ export function CreateTaskDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Due Date */}
+          <div className="space-y-2">
+            <Label htmlFor="dueDate">Due Date</Label>
+            <Input
+              id="dueDate"
+              type="date"
+              value={formData.dueDate}
+              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+              disabled={loading}
+            />
           </div>
 
           {/* Submit Button */}

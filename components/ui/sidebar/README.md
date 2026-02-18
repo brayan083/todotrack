@@ -1,6 +1,6 @@
 # Sidebar Component
 
-Un componente de sidebar totalmente composable, temático y personalizable para tu aplicación TodoTrack.
+Un componente de sidebar totalmente composable, temático y personalizable para tu aplicación TimeTrack.
 
 ## Estructura
 

@@ -127,7 +127,7 @@ const taskId = await taskService.createTask({
   title: 'Implementar feature',
   description: 'Descripción detallada',
   status: 'todo',
-  assignedId: 'userId',
+  assigneeId: 'userId',
   priority: 'high',
   attachments: [],
 });

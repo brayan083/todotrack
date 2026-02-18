@@ -277,7 +277,7 @@ export default function TasksKanban() {
         projectId: 'project-id',
         title: 'Nueva Tarea',
         status: 'todo',
-        assignedId: 'user-id',
+        assigneeId: 'user-id',
         priority: 'medium',
       });
     } catch (error) {

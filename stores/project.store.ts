@@ -4,9 +4,10 @@
  */
 
 import { create } from 'zustand';
-import { ProjectService, Project } from '@/services';
+import { ProjectService, Project, ActivityLogService } from '@/services';
 import { db } from '@/lib/firebase.config';
 import { Subscription } from 'rxjs';
+import { useAuthStore } from './auth.store';
 
 interface ProjectState {
   projects: Project[];
@@ -27,6 +28,7 @@ interface ProjectState {
   updateProject: (projectId: string, updates: Partial<Project>) => Promise<void>;
   archiveProject: (projectId: string) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  leaveProject: (projectId: string, userId: string) => Promise<void>;
   getProjectById: (projectId: string) => Project | undefined;
 }
 
@@ -104,8 +106,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       set({ loading: true, error: null });
       const projectService = ProjectService.getInstance(db);
-      const projectId = await projectService.createProject(data);
-      set({ loading: false });
+      const projectId = await projectService.createProject(data);      
+      // Registrar actividad
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const activityService = ActivityLogService.getInstance(db);
+        await activityService.logProjectCreated(
+          projectId,
+          user.uid,
+          user.displayName || user.email || 'Usuario',
+          data.name
+        );
+      }
+            set({ loading: false });
       return projectId;
     } catch (error: any) {
       set({ 
@@ -148,6 +161,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const projectService = ProjectService.getInstance(db);
       await projectService.archiveProject(projectId);
       
+      // Registrar actividad
+      const user = useAuthStore.getState().user;
+      const project = get().projects.find(p => p.id === projectId);
+      if (user && project) {
+        const activityService = ActivityLogService.getInstance(db);
+        await activityService.logProjectArchived(
+          projectId,
+          user.uid,
+          user.displayName || user.email || 'Usuario',
+          project.name
+        );
+      }
+      
       // Actualizar en el estado local
       const projects = get().projects.map(p => 
         p.id === projectId ? { ...p, isArchived: true } : p
@@ -178,6 +204,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ 
         error: error.message || 'Error al eliminar proyecto', 
         loading: false 
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Salir de un proyecto
+   */
+  leaveProject: async (projectId: string, userId: string) => {
+    try {
+      set({ loading: true, error: null });
+      const projectService = ProjectService.getInstance(db);
+      await projectService.leaveProject(projectId, userId);
+
+      const projects = get().projects.filter((project) => project.id !== projectId);
+      set({ projects, loading: false });
+    } catch (error: any) {
+      set({
+        error: error.message || 'Error al salir del proyecto',
+        loading: false
       });
       throw error;
     }

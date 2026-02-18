@@ -4,8 +4,9 @@
  */
 
 import { create } from 'zustand';
-import { TaskService, Task } from '@/services';
+import { TaskService, Task, ActivityLogService } from '@/services';
 import { db } from '@/lib/firebase.config';
+import { useAuthStore } from './auth.store';
 
 interface TaskState {
   tasks: Task[];
@@ -92,6 +93,19 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const taskService = TaskService.getInstance(db);
       const taskId = await taskService.createTask(data);
       
+      // Registrar actividad
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const activityService = ActivityLogService.getInstance(db);
+        await activityService.logTaskCreated(
+          data.projectId,
+          user.uid,
+          user.displayName || user.email || 'Usuario',
+          taskId,
+          data.title
+        );
+      }
+      
       // Agregar al estado local
       const newTask: Task = {
         ...data,
@@ -144,6 +158,22 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       set({ loading: true, error: null });
       const taskService = TaskService.getInstance(db);
       await taskService.updateTaskStatus(taskId, status);
+      
+      // Registrar actividad si se completa
+      if (status === 'done') {
+        const user = useAuthStore.getState().user;
+        const task = get().tasks.find(t => t.id === taskId);
+        if (user && task) {
+          const activityService = ActivityLogService.getInstance(db);
+          await activityService.logTaskCompleted(
+            task.projectId,
+            user.uid,
+            user.displayName || user.email || 'Usuario',
+            taskId,
+            task.title
+          );
+        }
+      }
       
       // Actualizar en el estado local
       const tasks = get().tasks.map(t => 

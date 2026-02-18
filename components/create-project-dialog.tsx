@@ -59,7 +59,7 @@ export function CreateProjectDialog({
     name: '',
     description: '',
     color: COLORS[4], // cyan default
-    clientId: '',
+    clientId: 'none',
     budget: '',
     hourlyRate: '',
     estimatedTime: '',
@@ -101,17 +101,12 @@ export function CreateProjectDialog({
       return;
     }
 
-    if (!formData.clientId) {
-      setError('Client is required');
-      return;
-    }
-
     try {
       setLoading(true);
       const projectService = ProjectService.getInstance(db);
 
       // Obtener el cliente seleccionado si existe
-      const selectedClient = formData.clientId 
+      const selectedClient = formData.clientId && formData.clientId !== 'none'
         ? clients.find(c => c.id === formData.clientId)
         : undefined;
 
@@ -120,8 +115,8 @@ export function CreateProjectDialog({
         name: formData.name.trim(),
         description: formData.description.trim() || '',
         color: formData.color,
-        clientId: formData.clientId,
-        clientName: selectedClient!.name,
+        clientId: (formData.clientId && formData.clientId !== 'none') ? formData.clientId : undefined,
+        clientName: selectedClient?.name || undefined,
         members: [userId],
         ownerId: userId,
         isArchived: false,
@@ -139,8 +134,8 @@ export function CreateProjectDialog({
         name: projectData.name,
         description: projectData.description,
         color: projectData.color,
-        clientId: projectData.clientId,
-        clientName: projectData.clientName,
+        clientId: projectData.clientId || undefined,
+        clientName: projectData.clientName || undefined,
         members: projectData.members,
         ownerId: projectData.ownerId,
         isArchived: projectData.isArchived,
@@ -159,7 +154,7 @@ export function CreateProjectDialog({
         name: '',
         description: '',
         color: COLORS[4],
-        clientId: '',
+        clientId: 'none',
         budget: '',
         hourlyRate: '',
         estimatedTime: '',
@@ -244,7 +239,7 @@ export function CreateProjectDialog({
           {/* Client Name */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="clientId">Client *</Label>
+              <Label htmlFor="clientId">Client (Optional)</Label>
               <CreateClientDialog
                 userId={userId}
                 onClientSaved={handleClientCreated}
@@ -267,9 +262,12 @@ export function CreateProjectDialog({
               disabled={loading || loadingClients}
             >
               <SelectTrigger>
-                <SelectValue placeholder={loadingClients ? "Loading clients..." : "Select a client"} />
+                <SelectValue placeholder={loadingClients ? "Loading clients..." : "Select a client (optional)"} />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">
+                  <span className="text-muted-foreground">No client</span>
+                </SelectItem>
                 {clients.length === 0 ? (
                   <div className="px-2 py-6 text-center text-sm text-muted-foreground">
                     No clients yet. Create one to get started.

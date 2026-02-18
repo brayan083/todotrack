@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="256" height="256" fill="url(#grad1)"/>
+  
+  <!-- Clock circle -->
+  <circle cx="128" cy="128" r="100" fill="white" opacity="0.95"/>
+  
+  <!-- Clock border -->
+  <circle cx="128" cy="128" r="100" fill="none" stroke="#3B82F6" stroke-width="3"/>
+  
+  <!-- Hour markers -->
+  <g stroke="#3B82F6" stroke-width="2">
+    <!-- 12 o'clock -->
+    <line x1="128" y1="42" x2="128" y2="55"/>
+    <!-- 3 o'clock -->
+    <line x1="214" y1="128" x2="201" y2="128"/>
+    <!-- 6 o'clock -->
+    <line x1="128" y1="214" x2="128" y2="201"/>
+    <!-- 9 o'clock -->
+    <line x1="42" y1="128" x2="55" y2="128"/>
+  </g>
+  
+  <!-- Hour hand -->
+  <line x1="128" y1="128" x2="128" y2="85" stroke="#3B82F6" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Minute hand -->
+  <line x1="128" y1="128" x2="175" y2="128" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- Center dot -->
+  <circle cx="128" cy="128" r="6" fill="#3B82F6"/>
+  
+  <!-- Checkmark accent (task complete) -->
+  <g transform="translate(170, 180)" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 2 8 L 8 14 L 18 4"/>
+  </g>
+</svg>

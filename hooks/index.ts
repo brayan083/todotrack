@@ -51,8 +51,11 @@ export function useTimer() {
     activeEntry,
     elapsedSeconds,
     isRunning,
+    isPaused,
     taskId,
     startTimer,
+    pauseTimer,
+    resumeTimer,
     stopTimer,
     loadActiveTimer,
     clearTimer,
@@ -70,8 +73,12 @@ export function useTimer() {
     activeEntry,
     elapsedSeconds,
     isRunning,
+    isPaused,
     taskId,
-    startTimer: (taskId: string) => user ? startTimer(user.uid, taskId) : Promise.reject('No user'),
+    startTimer: (data: { projectId: string; taskId?: string | null; description?: string; entryType?: string; tags?: string[] }) =>
+      user ? startTimer(user.uid, data) : Promise.reject('No user'),
+    pauseTimer,
+    resumeTimer,
     stopTimer,
   };
 }
@@ -94,6 +101,7 @@ export function useProjects() {
     updateProject,
     archiveProject,
     deleteProject,
+    leaveProject,
     getProjectById,
   } = useProjectStore();
 
@@ -117,6 +125,7 @@ export function useProjects() {
     updateProject,
     archiveProject,
     deleteProject,
+    leaveProject,
     getProjectById,
   };
 }
