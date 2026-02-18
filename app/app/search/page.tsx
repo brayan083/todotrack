@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
@@ -11,7 +11,7 @@ import { ProjectService, type Project } from "@/services/project.service";
 import { TaskService, type Task } from "@/services/task.service";
 import { db } from "@/lib/firebase.config";
 
-const SearchPage: React.FC = () => {
+const SearchResults: React.FC = () => {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
   const { user } = useAuthStore();
@@ -187,6 +187,23 @@ const SearchPage: React.FC = () => {
         )}
       </div>
     </div>
+  );
+};
+
+const SearchPage: React.FC = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-full flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading search...</p>
+          </div>
+        </div>
+      }
+    >
+      <SearchResults />
+    </Suspense>
   );
 };
 
