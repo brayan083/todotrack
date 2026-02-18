@@ -27,6 +27,7 @@ import { ProjectService, type Project } from '@/services';
 import { ClientService, type Client } from '@/services/client.service';
 import { CreateClientDialog } from '@/components/create-client-dialog';
 import { db } from '@/lib/firebase.config';
+import type { ProjectRole } from '@/lib/roles';
 
 const COLORS = [
   '#ef4444', // red
@@ -111,6 +112,7 @@ export function CreateProjectDialog({
         : undefined;
 
       // Construir objeto con todos los campos
+      const ownerRole: ProjectRole = 'owner';
       const projectData = {
         name: formData.name.trim(),
         description: formData.description.trim() || '',
@@ -123,7 +125,7 @@ export function CreateProjectDialog({
         budget: formData.budget && !isNaN(parseFloat(formData.budget)) ? parseFloat(formData.budget) : null,
         hourlyRate: formData.hourlyRate && !isNaN(parseFloat(formData.hourlyRate)) ? parseFloat(formData.hourlyRate) : null,
         estimatedTime: formData.estimatedTime.trim() || '',
-        userRoles: { [userId]: 'owner' },
+        userRoles: { [userId]: ownerRole },
       };
 
       const projectId = await projectService.createProject(projectData);
