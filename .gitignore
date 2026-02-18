@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 .next
+.firebaserc
+.firebase
+firebase.json
+
+apphosting.yaml
