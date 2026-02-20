@@ -25,11 +25,13 @@ export interface Task {
   title: string;
   description?: string;
   status: string;
-  assigneeId: string;
+  assigneeIds: string[];
+  assigneeId?: string;
   position: number;
   dueDate?: Date;
   priority?: string;
   attachments?: Attachment[];
+  tagIds?: string[];
   createdAt: Date;
 }
 
@@ -78,17 +80,24 @@ export class TaskService extends BaseService {
       }
       
       const data = taskDoc.data();
+      const assigneeIds = Array.isArray(data.assigneeIds)
+        ? data.assigneeIds.filter(Boolean)
+        : data.assigneeId
+          ? [data.assigneeId]
+          : [];
       return {
         id: taskDoc.id,
         projectId: data.projectId,
         title: data.title,
         description: data.description,
         status: data.status,
-        assigneeId: data.assigneeId,
+        assigneeIds,
+        assigneeId: assigneeIds[0],
         position: data.position || 0,
         dueDate: data.dueDate?.toDate(),
         priority: data.priority,
         attachments: data.attachments || [],
+        tagIds: data.tagIds || [],
         createdAt: data.createdAt?.toDate() || new Date(),
       };
     } catch (error: any) {
@@ -105,34 +114,74 @@ export class TaskService extends BaseService {
   public async getAllTasks(userId: string, projectId?: string): Promise<Task[]> {
     try {
       const tasksRef = collection(this.db, this.collectionName);
-      let q = query(tasksRef, where('assigneeId', '==', userId));
-
       // Si se proporciona un projectId, traer todas las tareas del proyecto
       if (projectId) {
-        q = query(tasksRef, where('projectId', '==', projectId));
+        const q = query(tasksRef, where('projectId', '==', projectId));
+        const querySnapshot = await getDocs(q);
+        const tasks: Task[] = [];
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const assigneeIds = Array.isArray(data.assigneeIds)
+            ? data.assigneeIds.filter(Boolean)
+            : data.assigneeId
+              ? [data.assigneeId]
+              : [];
+          tasks.push({
+            id: doc.id,
+            projectId: data.projectId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            assigneeIds,
+            assigneeId: assigneeIds[0],
+            position: data.position || 0,
+            dueDate: data.dueDate?.toDate(),
+            priority: data.priority,
+            attachments: data.attachments || [],
+            tagIds: data.tagIds || [],
+            createdAt: data.createdAt?.toDate() || new Date(),
+          });
+        });
+
+        return tasks;
       }
-      
-      const querySnapshot = await getDocs(q);
-      const tasks: Task[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        tasks.push({
-          id: doc.id,
-          projectId: data.projectId,
-          title: data.title,
-          description: data.description,
-          status: data.status,
-          assigneeId: data.assigneeId,
-          position: data.position || 0,
-          dueDate: data.dueDate?.toDate(),
-          priority: data.priority,
-          attachments: data.attachments || [],
-          createdAt: data.createdAt?.toDate() || new Date(),
+
+      const queries = [
+        query(tasksRef, where('assigneeIds', 'array-contains', userId)),
+        query(tasksRef, where('assigneeId', '==', userId)),
+      ];
+
+      const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
+      const taskMap = new Map<string, Task>();
+
+      snapshots.forEach((snapshot) => {
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const assigneeIds = Array.isArray(data.assigneeIds)
+            ? data.assigneeIds.filter(Boolean)
+            : data.assigneeId
+              ? [data.assigneeId]
+              : [];
+          taskMap.set(doc.id, {
+            id: doc.id,
+            projectId: data.projectId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            assigneeIds,
+            assigneeId: assigneeIds[0],
+            position: data.position || 0,
+            dueDate: data.dueDate?.toDate(),
+            priority: data.priority,
+            attachments: data.attachments || [],
+            tagIds: data.tagIds || [],
+            createdAt: data.createdAt?.toDate() || new Date(),
+          });
         });
       });
-      
-      return tasks;
+
+      return Array.from(taskMap.values());
     } catch (error: any) {
       console.error('Error al obtener tareas:', error);
       throw new Error(`Error al obtener tareas: ${error.message}`);
@@ -159,17 +208,24 @@ export class TaskService extends BaseService {
         const tasks: Task[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          const assigneeIds = Array.isArray(data.assigneeIds)
+            ? data.assigneeIds.filter(Boolean)
+            : data.assigneeId
+              ? [data.assigneeId]
+              : [];
           tasks.push({
             id: doc.id,
             projectId: data.projectId,
             title: data.title,
             description: data.description,
             status: data.status,
-            assigneeId: data.assigneeId,
+            assigneeIds,
+            assigneeId: assigneeIds[0],
             position: data.position || 0,
             dueDate: data.dueDate?.toDate(),
             priority: data.priority,
             attachments: data.attachments || [],
+            tagIds: data.tagIds || [],
             createdAt: data.createdAt?.toDate() || new Date(),
           });
         });

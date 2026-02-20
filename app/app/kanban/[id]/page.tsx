@@ -1,12 +1,11 @@
 "use client";
 
-import React, { use, useEffect, useState } from "react";
+import React, { use, useEffect, useRef, useState } from "react";
 import { useRouter, notFound } from "next/navigation";
-import { Search, Plus, MoreHorizontal, Edit, Play, ArrowLeft, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { Search, MoreHorizontal, ArrowLeft, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -18,14 +17,24 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { DragDropContext, Droppable, DropResult } from "@hello-pangea/dnd";
 import { ProjectService, type Project } from "@/services/project.service";
 import { TaskService, type Task } from "@/services/task.service";
 import { UserService, type UserData } from "@/services/user.service";
+import { TagService, type Tag } from "@/services/tag.service";
 import { CreateTaskDialog } from "@/components/create-task-dialog";
 import { db } from "@/lib/firebase.config";
+import {
+  PRIORITY_OPTIONS,
+  STATUS_LABELS,
+  UNASSIGNED_FILTER_VALUE,
+} from "@/lib/task-constants";
 import { useAuthStore } from "@/stores";
-import { canEditTasks, getUserRole } from "@/lib/roles";
+import { useTimer } from "@/hooks";
+import { canDeleteTasks, canEditTasks, getUserRole } from "@/lib/roles";
+import { useKanbanTasks } from "../_hooks/use-kanban-tasks";
+import { KanbanTaskCard } from "../_components/kanban-task-card";
+import { ProjectTaskDrawer } from "../../project/[id]/_components/project-task-drawer";
 
 interface KanbanPageProps {
   params: Promise<{
@@ -33,27 +42,21 @@ interface KanbanPageProps {
   }>;
 }
 
-const PRIORITY_STYLES: Record<string, string> = {
-  low: "text-blue-600 bg-blue-100 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
-  medium: "text-yellow-600 bg-yellow-100 dark:bg-yellow-500/10 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/20",
-  high: "text-orange-600 bg-orange-100 dark:bg-orange-500/10 dark:text-orange-400 border-orange-200 dark:border-orange-500/20",
-  urgent: "text-red-600 bg-red-100 dark:bg-red-500/10 dark:text-red-400 border-red-200 dark:border-red-500/20",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  "todo": "To Do",
-  "in-progress": "In Progress",
-  "done": "Done",
-};
-
-const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"];
-const UNASSIGNED_FILTER_VALUE = "unassigned";
-
 const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
   const resolvedParams = use(params);
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, loading: authLoading } = useAuthStore();
+  const {
+    activeEntry,
+    isRunning,
+    isPaused,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    stopTimer,
+  } = useTimer();
   const [project, setProject] = useState<Project | null>(null);
+  const [projectLoaded, setProjectLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assignees, setAssignees] = useState<{ uid: string; label: string; photoURL?: string | null }[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, UserData>>({});
@@ -62,67 +65,66 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
   const [assigneeFilters, setAssigneeFilters] = useState<string[]>([]);
+  const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [dueDateFrom, setDueDateFrom] = useState("");
   const [dueDateTo, setDueDateTo] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editData, setEditData] = useState<Partial<Task>>({});
+  const [tags, setTags] = useState<Tag[]>([]);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
+    let unsubscribeProject: (() => void) | null = null;
+    let unsubscribeTasks: (() => void) | null = null;
     let isMounted = true;
 
     const loadData = async () => {
-      if (!user || !resolvedParams.id) return;
+      if (!user || !resolvedParams.id) {
+        if (isMounted) {
+          setProject(null);
+          setProjectLoaded(false);
+          setTasks([]);
+          setAssignees([]);
+          setUsersMap({});
+          setLoading(false);
+        }
+        return;
+      }
 
       try {
         setLoading(true);
+        setProjectLoaded(false);
         const projectService = ProjectService.getInstance(db);
         const taskService = TaskService.getInstance(db);
-        const userService = UserService.getInstance(db);
 
-        const foundProject = await projectService.getProject(resolvedParams.id);
-        if (!foundProject) {
-          if (isMounted) {
-            setProject(null);
-          }
-          return;
-        }
-
-        if (isMounted) {
-          setProject(foundProject);
-        }
-
-        const memberIds = (foundProject.members || []).filter(Boolean);
-        if (memberIds.length > 0) {
-          const users = await Promise.all(memberIds.map((memberId) => userService.getUser(memberId)));
-          const mapped = users
-            .filter((userData): userData is UserData => Boolean(userData))
-            .map((userData) => ({
-              uid: userData.uid,
-              label: userData.displayName || userData.email || userData.uid.slice(0, 8),
-              photoURL: userData.photoURL,
-            }));
-          if (isMounted) {
-            setAssignees(mapped);
-          }
-
-          // Crear el mapa de usuarios
-          const usersData: Record<string, UserData> = {};
-          users.forEach((userData) => {
-            if (userData) {
-              usersData[userData.uid] = userData;
+        unsubscribeProject = projectService.subscribeToProject(
+          resolvedParams.id,
+          (nextProject) => {
+            if (!isMounted) return;
+            setProjectLoaded(true);
+            if (!nextProject) {
+              setProject(null);
+              setTasks([]);
+              setAssignees([]);
+              setUsersMap({});
+              setLoading(false);
+              return;
             }
-          });
-          if (isMounted) {
-            setUsersMap(usersData);
-          }
-        } else {
-          if (isMounted) {
-            setAssignees([]);
-            setUsersMap({});
-          }
-        }
 
-        unsubscribe = taskService.subscribeToProjectTasks(
+            setProject(nextProject);
+            setLoading(false);
+          },
+          (error) => {
+            console.error("Error loading project:", error);
+            if (isMounted) {
+              setProjectLoaded(true);
+              setProject(null);
+              setLoading(false);
+            }
+          }
+        );
+
+        unsubscribeTasks = taskService.subscribeToProjectTasks(
           resolvedParams.id,
           (projectTasks) => {
             if (isMounted) {
@@ -138,10 +140,6 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
         if (isMounted) {
           setProject(null);
         }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
       }
     };
 
@@ -149,18 +147,107 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
 
     return () => {
       isMounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      unsubscribeProject?.();
+      unsubscribeTasks?.();
     };
   }, [user, resolvedParams.id]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadMembers = async () => {
+      if (!project) {
+        if (isMounted) {
+          setAssignees([]);
+          setUsersMap({});
+        }
+        return;
+      }
+
+      const memberIds = (project.members || []).filter(Boolean);
+      if (memberIds.length === 0) {
+        if (isMounted) {
+          setAssignees([]);
+          setUsersMap({});
+        }
+        return;
+      }
+
+      try {
+        const userService = UserService.getInstance(db);
+        const users = await Promise.all(memberIds.map((memberId) => userService.getUser(memberId)));
+        if (!isMounted) return;
+
+        const mapped = users
+          .filter((userData): userData is UserData => Boolean(userData))
+          .map((userData) => ({
+            uid: userData.uid,
+            label: userData.displayName || userData.email || userData.uid.slice(0, 8),
+            photoURL: userData.photoURL,
+          }));
+        setAssignees(mapped);
+
+        const usersData: Record<string, UserData> = {};
+        users.forEach((userData) => {
+          if (userData) {
+            usersData[userData.uid] = userData;
+          }
+        });
+        setUsersMap(usersData);
+      } catch (error) {
+        console.error("Error loading project members:", error);
+      }
+    };
+
+    loadMembers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [project?.id, project?.members?.join("|")]);
+
   const currentUserRole = getUserRole(project, user?.uid);
   const canEditTaskActions = canEditTasks(currentUserRole);
+  const canDeleteTaskActions = canDeleteTasks(currentUserRole);
+
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTaskCreated = (newTask: Task) => {
     setTasks((prev) => [...prev, newTask]);
   };
+
+  const handlePlayTask = async (task: Task) => {
+    if (!canEditTaskActions) return;
+
+    try {
+      await startTimer({
+        projectId: task.projectId,
+        taskId: task.id,
+        description: task.title,
+      });
+
+      if (task.status === "in-progress") {
+        return;
+      }
+
+      const nextPosition = tasks.filter((item) => item.status === "in-progress").length;
+      const taskService = TaskService.getInstance(db);
+      await taskService.updateTask(task.id, { status: "in-progress", position: nextPosition });
+
+      setTasks((prev) =>
+        prev.map((item) =>
+          item.id === task.id
+            ? { ...item, status: "in-progress", position: nextPosition }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error("Error starting timer for task:", error);
+    }
+  };
+
+  const isTaskActive = (taskId: string) =>
+    Boolean(isRunning && activeEntry?.taskId && activeEntry.taskId === taskId);
 
   const toggleFilterValue = (
     value: string,
@@ -173,6 +260,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     setStatusFilters([]);
     setPriorityFilters([]);
     setAssigneeFilters([]);
+    setTagFilters([]);
     setDueDateFrom("");
     setDueDateTo("");
   };
@@ -181,77 +269,180 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     statusFilters.length +
     priorityFilters.length +
     assigneeFilters.length +
+    tagFilters.length +
     (dueDateFrom ? 1 : 0) +
     (dueDateTo ? 1 : 0);
 
-  const filteredTasks = tasks.filter((task) => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return true;
-    return (
-      task.title.toLowerCase().includes(term) ||
-      task.description?.toLowerCase().includes(term)
-    );
+  const { todoTasks, inProgressTasks, doneTasks } = useKanbanTasks({
+    tasks,
+    searchTerm,
+    statusFilters,
+    priorityFilters,
+    assigneeFilters,
+    tagFilters,
+    dueDateFrom,
+    dueDateTo,
   });
 
-  const filteredTasksWithFilters = filteredTasks.filter((task) => {
-    if (statusFilters.length > 0 && !statusFilters.includes(task.status)) {
-      return false;
-    }
-
-    if (priorityFilters.length > 0) {
-      const priorityValue = task.priority || "medium";
-      if (!priorityFilters.includes(priorityValue)) {
-        return false;
+  useEffect(() => {
+    const loadTags = async () => {
+      if (!resolvedParams.id) {
+        setTags([]);
+        return;
       }
-    }
-
-    if (assigneeFilters.length > 0) {
-      if (!task.assigneeId) {
-        if (!assigneeFilters.includes(UNASSIGNED_FILTER_VALUE)) {
-          return false;
-        }
-      } else if (!assigneeFilters.includes(task.assigneeId)) {
-        return false;
+      try {
+        const tagService = TagService.getInstance(db);
+        const projectTags = await tagService.getTagsByProject(resolvedParams.id);
+        setTags(projectTags);
+      } catch (error) {
+        console.error("Error loading tags:", error);
+        setTags([]);
       }
-    }
+    };
 
-    if (dueDateFrom || dueDateTo) {
-      if (!task.dueDate) return false;
-      const dueDate = new Date(task.dueDate);
-      const fromDate = dueDateFrom ? new Date(`${dueDateFrom}T00:00:00`) : null;
-      const toDate = dueDateTo ? new Date(`${dueDateTo}T23:59:59`) : null;
-      if (fromDate && dueDate < fromDate) return false;
-      if (toDate && dueDate > toDate) return false;
-    }
+    loadTags();
+  }, [resolvedParams.id]);
 
-    return true;
-  });
+  type KanbanAssignee = { id: string; displayName: string; photoURL?: string | null };
 
-  const sortTasksByPosition = (list: Task[]) =>
-    [...list].sort((a, b) => {
-      const aPos = a.position ?? 0;
-      const bPos = b.position ?? 0;
-      if (aPos !== bPos) return aPos - bPos;
-      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return aCreated - bCreated;
-    });
-
-  const todoTasks = sortTasksByPosition(filteredTasksWithFilters.filter((task) => task.status === "todo"));
-  const inProgressTasks = sortTasksByPosition(filteredTasksWithFilters.filter((task) => task.status === "in-progress"));
-  const doneTasks = sortTasksByPosition(filteredTasksWithFilters.filter((task) => task.status === "done"));
-
-  const getUserInfo = (userId: string) => {
+  const getUserInfo = (userId: string): KanbanAssignee | null => {
     const userData = usersMap[userId];
     if (!userData) {
-      return { displayName: "Unknown", email: "", photoURL: null };
+      return null;
     }
     return {
+      id: userId,
       displayName: userData.displayName || userData.email || "Unknown",
-      email: userData.email || "",
-      photoURL: userData.photoURL || null,
+      photoURL: userData.photoURL ?? null,
     };
   };
+
+  const handleEditTask = (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    setSelectedTask(task);
+    setEditData(task);
+  };
+
+  const handleBackToList = () => {
+    setSelectedTask(null);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!canDeleteTaskActions) return;
+    const confirmed = window.confirm("Delete this task? This action cannot be undone.");
+    if (!confirmed) return;
+
+    try {
+      const taskService = TaskService.getInstance(db);
+      await taskService.deleteTask(taskId);
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+      if (selectedTask?.id === taskId) {
+        setSelectedTask(null);
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedTask) return;
+    const latest = tasks.find((task) => task.id === selectedTask.id);
+    if (latest && latest !== selectedTask) {
+      setSelectedTask(latest);
+    }
+  }, [tasks, selectedTask]);
+
+  useEffect(() => {
+    if (!selectedTask || !canEditTaskActions) return;
+
+    const payload = {
+      title: editData.title ?? selectedTask.title,
+      description: editData.description ?? "",
+      status: editData.status ?? selectedTask.status,
+      priority: editData.priority ?? selectedTask.priority,
+      dueDate: editData.dueDate ?? selectedTask.dueDate,
+      assigneeIds: editData.assigneeIds ?? selectedTask.assigneeIds ?? [],
+      tagIds: editData.tagIds ?? selectedTask.tagIds ?? [],
+    };
+
+    const normalizeDate = (value?: Date | string) => (value ? new Date(value).toISOString() : "");
+
+    const currentSnapshot = JSON.stringify({
+      title: payload.title || "",
+      description: payload.description || "",
+      status: payload.status || "todo",
+      priority: payload.priority || "medium",
+      dueDate: normalizeDate(payload.dueDate),
+      assigneeIds: payload.assigneeIds,
+      tagIds: payload.tagIds,
+    });
+
+    const savedSnapshot = JSON.stringify({
+      title: selectedTask.title || "",
+      description: selectedTask.description || "",
+      status: selectedTask.status || "todo",
+      priority: selectedTask.priority || "medium",
+      dueDate: normalizeDate(selectedTask.dueDate),
+      assigneeIds: selectedTask.assigneeIds || [],
+      tagIds: selectedTask.tagIds || [],
+    });
+
+    if (currentSnapshot === savedSnapshot) return;
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        const taskService = TaskService.getInstance(db);
+        const updates: Partial<Task> = {};
+
+        if (payload.title !== selectedTask.title) updates.title = payload.title;
+        if ((payload.description || "") !== (selectedTask.description || "")) {
+          updates.description = payload.description;
+        }
+        if (payload.status !== selectedTask.status) updates.status = payload.status;
+        if (payload.priority !== selectedTask.priority) updates.priority = payload.priority;
+
+        const payloadDue = normalizeDate(payload.dueDate);
+        const selectedDue = normalizeDate(selectedTask.dueDate);
+        if (payloadDue !== selectedDue) {
+          updates.dueDate = payload.dueDate ? new Date(payload.dueDate) : undefined;
+        }
+
+        const selectedAssigneeIds = selectedTask.assigneeIds || [];
+        const payloadAssigneeIds = payload.assigneeIds || [];
+        if (JSON.stringify(payloadAssigneeIds) !== JSON.stringify(selectedAssigneeIds)) {
+          updates.assigneeIds = payloadAssigneeIds;
+          updates.assigneeId = payloadAssigneeIds[0] || "";
+        }
+
+        const selectedTagIds = selectedTask.tagIds || [];
+        const payloadTagIds = payload.tagIds || [];
+        if (JSON.stringify(payloadTagIds) !== JSON.stringify(selectedTagIds)) {
+          updates.tagIds = payloadTagIds;
+        }
+
+        if (Object.keys(updates).length === 0) return;
+
+        await taskService.updateTask(selectedTask.id, updates);
+        setTasks((prev) =>
+          prev.map((task) => (task.id === selectedTask.id ? { ...task, ...updates } : task))
+        );
+        setSelectedTask((prev) => (prev ? { ...prev, ...updates } : prev));
+      } catch (error) {
+        console.error("Error auto-saving task:", error);
+      }
+    }, 600);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [editData, selectedTask, canEditTaskActions, setTasks]);
 
   const handleDragEnd = async (result: DropResult) => {
     if (!canEditTaskActions) return;
@@ -337,86 +528,8 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     }
   };
 
-  const renderTaskCard = (task: Task, index: number) => {
-    const assignee = task.assigneeId ? getUserInfo(task.assigneeId) : null;
-    const priorityClass = task.priority ? PRIORITY_STYLES[task.priority] : PRIORITY_STYLES.medium;
 
-    return (
-      <Draggable
-        key={task.id}
-        draggableId={task.id}
-        index={index}
-        isDragDisabled={!canEditTaskActions}
-      >
-        {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.draggableProps}
-            {...provided.dragHandleProps}
-          >
-            <Card 
-              className={`group ${
-                canEditTaskActions
-                  ? "cursor-grab active:cursor-grabbing"
-                  : "cursor-default"
-              } hover:shadow-md transition-all ${
-                snapshot.isDragging ? "shadow-lg rotate-2" : ""
-              }`}
-            >
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <Badge variant="outline" className={priorityClass}>
-                    {task.priority || "medium"}
-                  </Badge>
-                  {canEditTaskActions && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/app/project/${resolvedParams.id}/task/${task.id}`);
-                      }}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <h4 className="text-sm font-medium mb-3 leading-snug">{task.title}</h4>
-                {task.description && (
-                  <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{task.description}</p>
-                )}
-                <div className="flex items-center justify-between mt-4">
-                  <div className="flex items-center gap-2">
-                    {assignee ? (
-                      <>
-                        <Avatar className="w-6 h-6">
-                          {assignee.photoURL && <AvatarImage src={assignee.photoURL} />}
-                          <AvatarFallback className="text-[10px]">
-                            {assignee.displayName.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs text-muted-foreground">{assignee.displayName}</span>
-                      </>
-                    ) : (
-                      <>
-                        <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold">
-                          UN
-                        </div>
-                        <span className="text-xs text-muted-foreground">Unassigned</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </Draggable>
-    );
-  };
-
-  if (loading) {
+  if (authLoading || loading || !projectLoaded) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -425,6 +538,10 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
         </div>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   if (!project) {
@@ -545,7 +662,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
             </div>
           </div>
           <CollapsibleContent className="mt-2 rounded-lg border border-border/60 bg-background/80 p-4">
-            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-5">
               <div className="space-y-3">
                 <p className="text-xs font-medium text-muted-foreground">Status</p>
                 <div className="space-y-2">
@@ -611,6 +728,28 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
               </div>
 
               <div className="space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">Tags</p>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {tags.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No tags yet</p>
+                  ) : (
+                    tags.map((tag) => (
+                      <div key={tag.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`tag-${tag.id}`}
+                          checked={tagFilters.includes(tag.id)}
+                          onCheckedChange={() => toggleFilterValue(tag.id, setTagFilters)}
+                        />
+                        <label htmlFor={`tag-${tag.id}`} className="text-sm">
+                          #{tag.name}
+                        </label>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <p className="text-xs font-medium text-muted-foreground">Due date</p>
                 <div className="space-y-2">
                   <div>
@@ -671,7 +810,25 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                         No tasks in To Do
                       </div>
                     ) : (
-                      todoTasks.map((task, index) => renderTaskCard(task, index))
+                      todoTasks.map((task, index) => (
+                        <KanbanTaskCard
+                          key={task.id}
+                          task={task}
+                          index={index}
+                          assignees={(task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []))
+                            .map((assigneeId) => getUserInfo(assigneeId))
+                            .filter((assignee): assignee is KanbanAssignee => Boolean(assignee))}
+                          canEdit={canEditTaskActions}
+                          canPlay={canEditTaskActions}
+                          isActive={isTaskActive(task.id)}
+                          isPaused={isTaskActive(task.id) && isPaused}
+                          onPlay={handlePlayTask}
+                          onPause={pauseTimer}
+                          onResume={resumeTimer}
+                          onStop={stopTimer}
+                          onEdit={handleEditTask}
+                        />
+                      ))
                     )}
                     {provided.placeholder}
                   </div>
@@ -708,7 +865,25 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                         Drag tasks here to start
                       </div>
                     ) : (
-                      inProgressTasks.map((task, index) => renderTaskCard(task, index))
+                      inProgressTasks.map((task, index) => (
+                        <KanbanTaskCard
+                          key={task.id}
+                          task={task}
+                          index={index}
+                          assignees={(task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []))
+                            .map((assigneeId) => getUserInfo(assigneeId))
+                            .filter((assignee): assignee is KanbanAssignee => Boolean(assignee))}
+                          canEdit={canEditTaskActions}
+                          canPlay={canEditTaskActions}
+                          isActive={isTaskActive(task.id)}
+                          isPaused={isTaskActive(task.id) && isPaused}
+                          onPlay={handlePlayTask}
+                          onPause={pauseTimer}
+                          onResume={resumeTimer}
+                          onStop={stopTimer}
+                          onEdit={handleEditTask}
+                        />
+                      ))
                     )}
                     {provided.placeholder}
                   </div>
@@ -745,7 +920,25 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                         No completed tasks
                       </div>
                     ) : (
-                      doneTasks.map((task, index) => renderTaskCard(task, index))
+                      doneTasks.map((task, index) => (
+                        <KanbanTaskCard
+                          key={task.id}
+                          task={task}
+                          index={index}
+                          assignees={(task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []))
+                            .map((assigneeId) => getUserInfo(assigneeId))
+                            .filter((assignee): assignee is KanbanAssignee => Boolean(assignee))}
+                          canEdit={canEditTaskActions}
+                          canPlay={canEditTaskActions}
+                          isActive={isTaskActive(task.id)}
+                          isPaused={isTaskActive(task.id) && isPaused}
+                          onPlay={handlePlayTask}
+                          onPause={pauseTimer}
+                          onResume={resumeTimer}
+                          onStop={stopTimer}
+                          onEdit={handleEditTask}
+                        />
+                      ))
                     )}
                     {provided.placeholder}
                   </div>
@@ -755,6 +948,23 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
           </div>
         </div>
       </DragDropContext>
+
+      <ProjectTaskDrawer
+        selectedTask={selectedTask}
+        editData={editData}
+        setEditData={setEditData}
+        canEditTaskActions={canEditTaskActions}
+        canDeleteTaskActions={canDeleteTaskActions}
+        isEditing={true}
+        projectName={project?.name}
+        assignees={assignees}
+        usersMap={usersMap}
+        availableTags={tags}
+        projectId={resolvedParams.id}
+        onTagsUpdated={setTags}
+        onBackToList={handleBackToList}
+        onDeleteTask={handleDeleteTask}
+      />
     </div>
   );
 };

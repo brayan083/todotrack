@@ -36,26 +36,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user, loading, router]);
 
   useEffect(() => {
-    const loadInvites = async () => {
-      if (!user) {
-        setInvites([]);
-        setProjectNames({});
-        return;
-      }
+    let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
 
-      try {
-        setInviteLoading(true);
-        setInviteError(null);
-        const invitationService = InvitationService.getInstance(db);
-        const results = await invitationService.getInvitationsForUser({
-          email: user.email || undefined,
-          userId: user.uid,
-        });
+    if (!user) {
+      setInvites([]);
+      setProjectNames({});
+      setInviteLoading(false);
+      setInviteError(null);
+      return;
+    }
 
+    setInviteLoading(true);
+    setInviteError(null);
+
+    const invitationService = InvitationService.getInstance(db);
+    const projectService = ProjectService.getInstance(db);
+
+    unsubscribe = invitationService.subscribeToInvitationsForUser(
+      {
+        email: user.email || undefined,
+        userId: user.uid,
+      },
+      async (results) => {
+        if (!isMounted) return;
         const pending = results.filter((invite) => invite.status === 'pending');
         setInvites(pending);
 
-        const projectService = ProjectService.getInstance(db);
         const uniqueProjectIds = Array.from(new Set(pending.map((invite) => invite.projectId)));
         const projectEntries = await Promise.all(
           uniqueProjectIds.map(async (projectId) => {
@@ -64,20 +71,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })
         );
 
+        if (!isMounted) return;
         const nameMap: Record<string, string> = {};
         projectEntries.forEach(([id, name]) => {
           nameMap[id] = name;
         });
         setProjectNames(nameMap);
-      } catch (error: any) {
+        setInviteLoading(false);
+      },
+      (error) => {
+        if (!isMounted) return;
         console.error('Error loading invitations:', error);
         setInviteError(error.message || 'Unable to load invitations');
-      } finally {
         setInviteLoading(false);
       }
-    };
+    );
 
-    loadInvites();
+    return () => {
+      isMounted = false;
+      unsubscribe?.();
+    };
   }, [user]);
 
   const pendingCount = invites.length;

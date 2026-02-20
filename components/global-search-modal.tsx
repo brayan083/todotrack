@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/stores";
@@ -115,6 +116,11 @@ const GlobalSearchModal: React.FC = () => {
       </div>
 
       <DialogContent className="max-w-2xl p-0 overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>
+            <VisuallyHidden>Global search</VisuallyHidden>
+          </DialogTitle>
+        </DialogHeader>
         <div className="border-b border-border bg-muted/40 px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

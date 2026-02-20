@@ -162,6 +162,51 @@ export class ProjectService extends BaseService {
   }
 
   /**
+   * Se suscribe a cambios en tiempo real de un proyecto
+   * @param projectId - ID del proyecto
+   */
+  public subscribeToProject(
+    projectId: string,
+    onNext: (project: Project | null) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const projectRef = doc(this.db, this.collectionName, projectId);
+
+    return onSnapshot(
+      projectRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          onNext(null);
+          return;
+        }
+
+        const data = snapshot.data();
+        onNext({
+          id: snapshot.id,
+          name: data.name,
+          description: data.description || '',
+          color: data.color,
+          members: data.members || [],
+          ownerId: data.ownerId,
+          clientId: data.clientId || undefined,
+          clientName: data.clientName || undefined,
+          hourlyRate: data.hourlyRate ?? null,
+          estimatedTime: data.estimatedTime || '',
+          isArchived: data.isArchived || false,
+          budget: data.budget ?? null,
+          userRoles: data.userRoles,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate(),
+        });
+      },
+      (error) => {
+        console.error('Error en suscripcion de proyecto:', error);
+        onError?.(error as Error);
+      }
+    );
+  }
+
+  /**
    * Archiva un proyecto
    * @param projectId - ID del proyecto
    */

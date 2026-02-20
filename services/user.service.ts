@@ -13,8 +13,12 @@ export interface UserData {
   email: string;
   displayName: string;
   photoURL: string;
+  photoStoragePath?: string;
   timezone: string;
   currency: string;
+  locale: string;
+  timeFormat: '12h' | '24h';
+  weekStartsOn: 'monday' | 'sunday';
   createdAt: any;
 }
 
@@ -46,18 +50,38 @@ export class UserService extends BaseService {
       
       // Obtener el usuario existente para verificar si es la primera vez
       const existingUser = await getDoc(userDocRef);
+      const existingData = existingUser.exists() ? existingUser.data() : null;
       
       // Obtener ubicación por defecto solo en la primera creación
       const defaults = getUserLocationDefaults();
+      const locale = (() => {
+        try {
+          return Intl.DateTimeFormat().resolvedOptions().locale || 'en-US';
+        } catch (error) {
+          return 'en-US';
+        }
+      })();
+      const timeFormat = (() => {
+        try {
+          const hourCycle = new Intl.DateTimeFormat(locale, { hour: 'numeric' }).resolvedOptions().hourCycle;
+          return hourCycle && (hourCycle === 'h23' || hourCycle === 'h24') ? '24h' : '12h';
+        } catch (error) {
+          return '24h';
+        }
+      })();
       
       const userData: UserData = {
         uid: user.uid,
         email: user.email || '',
         displayName: user.displayName || '',
         photoURL: user.photoURL || '',
-        timezone: existingUser.exists() ? existingUser.data()?.timezone || defaults.timezone : defaults.timezone,
-        currency: existingUser.exists() ? existingUser.data()?.currency || defaults.currency : defaults.currency,
-        createdAt: existingUser.exists() ? existingUser.data()?.createdAt : serverTimestamp(),
+        photoStoragePath: existingData?.photoStoragePath || '',
+        timezone: existingData?.timezone || defaults.timezone,
+        currency: existingData?.currency || defaults.currency,
+        locale: existingData?.locale || locale,
+        timeFormat: existingData?.timeFormat || timeFormat,
+        weekStartsOn: existingData?.weekStartsOn || 'monday',
+        createdAt: existingData?.createdAt || serverTimestamp(),
       };
 
       // Usar setDoc con merge para no sobrescribir si ya existe

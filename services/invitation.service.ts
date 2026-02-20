@@ -16,6 +16,7 @@ import {
   where,
   serverTimestamp,
   arrayUnion,
+  onSnapshot,
 } from 'firebase/firestore';
 
 export type InvitationStatus = 'pending' | 'accepted' | 'declined';
@@ -186,6 +187,79 @@ export class InvitationService extends BaseService {
       console.error('Error al obtener invitaciones de usuario:', error);
       throw new Error(`Error al obtener invitaciones de usuario: ${error.message}`);
     }
+  }
+
+  /**
+   * Se suscribe a invitaciones para un usuario por email o UID
+   */
+  public subscribeToInvitationsForUser(
+    { email, userId }: InvitationLookup,
+    onNext: (invitations: Invitation[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const invitationsRef = collection(this.db, this.collectionName);
+    const unsubscribes: Array<() => void> = [];
+    const snapshots: Array<Map<string, Invitation>> = [];
+
+    const normalizedEmail = email?.trim().toLowerCase();
+
+    const emit = () => {
+      const inviteMap = new Map<string, Invitation>();
+      snapshots.forEach((snapshot) => {
+        snapshot.forEach((invite, id) => {
+          inviteMap.set(id, invite);
+        });
+      });
+
+      const invitations = Array.from(inviteMap.values());
+      invitations.sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
+      onNext(invitations);
+    };
+
+    const attachSnapshot = (q: ReturnType<typeof query>, index: number) => {
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const inviteMap = new Map<string, Invitation>();
+          snapshot.forEach((inviteDoc) => {
+            const data = inviteDoc.data() as InvitationDoc;
+            inviteMap.set(inviteDoc.id, {
+              id: inviteDoc.id,
+              projectId: data.projectId || '',
+              email: data.email || '',
+              invitedBy: data.invitedBy || '',
+              role: normalizeInviteRole(data.role),
+              status: (data.status as InvitationStatus) || 'pending',
+              sentAt: data.sentAt?.toDate() || new Date(0),
+              inviteeId: data.inviteeId || undefined,
+            });
+          });
+
+          snapshots[index] = inviteMap;
+          emit();
+        },
+        (error) => {
+          console.error('Error en suscripcion de invitaciones:', error);
+          onError?.(error as Error);
+        }
+      );
+
+      unsubscribes.push(unsubscribe);
+    };
+
+    if (normalizedEmail) {
+      const emailQuery = query(invitationsRef, where('email', '==', normalizedEmail));
+      attachSnapshot(emailQuery, snapshots.length);
+    }
+
+    if (userId) {
+      const uidQuery = query(invitationsRef, where('inviteeId', '==', userId));
+      attachSnapshot(uidQuery, snapshots.length);
+    }
+
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
   }
 
   /**

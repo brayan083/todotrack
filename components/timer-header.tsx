@@ -32,7 +32,7 @@ export default function TimerHeader() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [projectId, setProjectId] = useState('');
-  const [taskId, setTaskId] = useState('');
+  const [taskId, setTaskId] = useState('none');
   const [description, setDescription] = useState('');
   const [entryType, setEntryType] = useState('normal');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,7 +64,7 @@ export default function TimerHeader() {
   }, [activeEntry, getTaskById]);
 
   useEffect(() => {
-    setTaskId('');
+    setTaskId('none');
   }, [projectId]);
 
   const handleStart = async () => {
@@ -76,13 +76,13 @@ export default function TimerHeader() {
     try {
       await startTimer({
         projectId,
-        taskId: taskId || null,
+        taskId: taskId === 'none' ? null : taskId,
         description: description.trim() || undefined,
         entryType,
       });
       setDialogOpen(false);
       setDescription('');
-      setTaskId('');
+      setTaskId('none');
     } finally {
       setIsSubmitting(false);
     }
@@ -100,9 +100,8 @@ export default function TimerHeader() {
   return (
     <div className="hidden md:flex items-center gap-3 bg-muted/50 rounded-full px-4 py-1.5 border border-border">
       <div
-        className={`w-2 h-2 rounded-full ${
-          isRunning && !isPaused ? 'bg-red-500 animate-pulse' : 'bg-slate-400'
-        }`}
+        className={`w-2 h-2 rounded-full ${isRunning && !isPaused ? 'bg-red-500 animate-pulse' : 'bg-slate-400'
+          }`}
       ></div>
       <span className="font-mono font-medium text-lg tracking-wider">{formattedTime}</span>
       <div className="h-5 w-px bg-border" />
@@ -169,18 +168,18 @@ export default function TimerHeader() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Iniciar cronometro</DialogTitle>
+            <DialogTitle>Start stopwatch</DialogTitle>
             <DialogDescription>
-              Selecciona proyecto y tarea antes de iniciar el registro.
+              Select a project and task before starting the timer.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="timer-project">Proyecto</Label>
+              <Label htmlFor="timer-project">Project</Label>
               <Select value={projectId} onValueChange={setProjectId}>
                 <SelectTrigger id="timer-project">
-                  <SelectValue placeholder="Selecciona proyecto" />
+                  <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
                   {projects.map((project) => (
@@ -193,12 +192,13 @@ export default function TimerHeader() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="timer-task">Tarea (opcional)</Label>
+              <Label htmlFor="timer-task">Task (optional)</Label>
               <Select value={taskId} onValueChange={setTaskId} disabled={!projectId}>
                 <SelectTrigger id="timer-task">
-                  <SelectValue placeholder="Selecciona tarea" />
+                  <SelectValue placeholder="Select task" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">No task</SelectItem>
                   {projectTasks.map((task) => (
                     <SelectItem key={task.id} value={task.id}>
                       {task.title}
@@ -209,20 +209,20 @@ export default function TimerHeader() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="timer-description">Descripcion (opcional)</Label>
+              <Label htmlFor="timer-description">Description (optional)</Label>
               <Input
                 id="timer-description"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="Que estas trabajando?"
+                placeholder="What are you working on?"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="timer-entry-type">Tipo de registro</Label>
+              <Label htmlFor="timer-entry-type">Entry Type</Label>
               <Select value={entryType} onValueChange={setEntryType}>
                 <SelectTrigger id="timer-entry-type">
-                  <SelectValue placeholder="Tipo" />
+                  <SelectValue placeholder="Entry Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="normal">Normal</SelectItem>
@@ -234,10 +234,10 @@ export default function TimerHeader() {
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={handleStart} disabled={!projectId || isSubmitting}>
-              {isSubmitting ? 'Iniciando...' : 'Iniciar'}
+              {isSubmitting ? 'Starting...' : 'Start'}
             </Button>
           </DialogFooter>
         </DialogContent>

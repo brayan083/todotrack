@@ -12,6 +12,7 @@ import {
     ChevronDown,
     LogOut,
     User2,
+    User,
     MoreHorizontal,
 } from "lucide-react"
 
@@ -80,6 +81,13 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
     const pathname = usePathname()
     const { user, logout } = useAuth()
     const { projects, loading: projectsLoading, leaveProject } = useProjects()
+    const maxProjects = 6
+    const ownProjects = user ? projects.filter((project) => project.ownerId === user.uid) : []
+    const sharedProjects = user ? projects.filter((project) => project.ownerId !== user.uid) : []
+    const visibleOwnProjects = ownProjects.slice(0, maxProjects)
+    const visibleSharedProjects = sharedProjects.slice(0, maxProjects)
+    const hasMoreOwnProjects = ownProjects.length > maxProjects
+    const hasMoreSharedProjects = sharedProjects.length > maxProjects
 
     const handleLeaveProject = async (projectId: string) => {
         if (!user) return
@@ -88,6 +96,64 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
         if (!confirmed) return
 
         await leaveProject(projectId, user.uid)
+    }
+
+    const renderProjectItem = (project: (typeof projects)[number]) => {
+        const role = getUserRole(project, user?.uid)
+        const canManage = canManageProject(role)
+        const canLeaveProject = Boolean(user && project.ownerId !== user.uid)
+
+        return (
+            <SidebarMenuItem key={project.id}>
+                <SidebarMenuButton asChild isActive={pathname === `/app/project/${project.id}`}>
+                    <Link href={`/app/project/${project.id}`}>
+                        <FolderKanban />
+                        <span className="flex-1 truncate">{project.name}</span>
+                        {user && project.ownerId !== user.uid && (
+                            <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" />
+                        )}
+                    </Link>
+                </SidebarMenuButton>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <SidebarMenuAction showOnHover>
+                            <MoreHorizontal />
+                            <span className="sr-only">More</span>
+                        </SidebarMenuAction>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        className="w-48"
+                        side="right"
+                        align="start"
+                    >
+                        <DropdownMenuItem asChild>
+                            <Link href={`/app/project/${project.id}/kanban`}>
+                                <KanbanSquare className="mr-2 size-4" />
+                                <span>Kanban Board</span>
+                            </Link>
+                        </DropdownMenuItem>
+                        {canManage && (
+                            <DropdownMenuItem>
+                                <span>Edit Project</span>
+                            </DropdownMenuItem>
+                        )}
+                        {canManage && (
+                            <DropdownMenuItem className="text-destructive">
+                                <span>Delete Project</span>
+                            </DropdownMenuItem>
+                        )}
+                        {canLeaveProject && (
+                            <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleLeaveProject(project.id)}
+                            >
+                                <span>Leave Project</span>
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </SidebarMenuItem>
+        )
     }
 
     return (
@@ -150,98 +216,6 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                     </SidebarGroupContent>
                 </SidebarGroup>
 
-                {/* Proyectos - Grupo Colapsable */}
-                <Collapsible defaultOpen className="group/collapsible">
-                    <SidebarGroup>
-                        <SidebarGroupLabel asChild>
-                            <CollapsibleTrigger className="w-full">
-                                Projects
-                                <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                            </CollapsibleTrigger>
-                        </SidebarGroupLabel>
-                        <CollapsibleContent>
-                            <SidebarGroupContent>
-                                <SidebarMenu>
-                                    {projectsLoading ? (
-                                        // Loading skeleton
-                                        Array.from({ length: 3 }).map((_, index) => (
-                                            <SidebarMenuItem key={index}>
-                                                <SidebarMenuSkeleton showIcon />
-                                            </SidebarMenuItem>
-                                        ))
-                                    ) : projects.length === 0 ? (
-                                        // Empty state
-                                        <SidebarMenuItem>
-                                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                                No projects yet
-                                            </div>
-                                        </SidebarMenuItem>
-                                    ) : (
-                                        // Projects list
-                                        projects.map((project) => {
-                                            const role = getUserRole(project, user?.uid)
-                                            const canManage = canManageProject(role)
-                                            const canLeaveProject = Boolean(user && project.ownerId !== user.uid)
-
-                                            return (
-                                            <SidebarMenuItem key={project.id}>
-                                                <SidebarMenuButton asChild isActive={pathname === `/app/project/${project.id}`}>
-                                                    <Link href={`/app/project/${project.id}`}>
-                                                        <FolderKanban />
-                                                        <span className="flex-1 truncate">{project.name}</span>
-                                                        {user && project.ownerId !== user.uid && (
-                                                            <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" />
-                                                        )}
-                                                    </Link>
-                                                </SidebarMenuButton>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <SidebarMenuAction showOnHover>
-                                                            <MoreHorizontal />
-                                                            <span className="sr-only">More</span>
-                                                        </SidebarMenuAction>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent
-                                                        className="w-48"
-                                                        side="right"
-                                                        align="start"
-                                                    >
-                                                        <DropdownMenuItem asChild>
-                                                            <Link href={`/app/project/${project.id}/kanban`}>
-                                                                <KanbanSquare className="mr-2 size-4" />
-                                                                <span>Kanban Board</span>
-                                                            </Link>
-                                                        </DropdownMenuItem>
-                                                        {canManage && (
-                                                            <DropdownMenuItem>
-                                                                <span>Edit Project</span>
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                        {canManage && (
-                                                            <DropdownMenuItem className="text-destructive">
-                                                                <span>Delete Project</span>
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                        {canLeaveProject && (
-                                                            <DropdownMenuItem
-                                                                className="text-destructive"
-                                                                onClick={() => handleLeaveProject(project.id)}
-                                                            >
-                                                                <span>Leave Project</span>
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </SidebarMenuItem>
-                                            )
-                                        })
-                                    )}
-                                </SidebarMenu>
-                            </SidebarGroupContent>
-                        </CollapsibleContent>
-                    </SidebarGroup>
-                </Collapsible>
-
                 {/* Quick Actions */}
                 <SidebarGroup>
                     <SidebarGroupLabel>Quick Actions</SidebarGroupLabel>
@@ -261,6 +235,94 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
+
+                {/* Proyectos propios - Grupo Colapsable */}
+                <Collapsible defaultOpen className="group/collapsible">
+                    <SidebarGroup>
+                        <SidebarGroupLabel asChild>
+                            <CollapsibleTrigger className="w-full">
+                                Projects
+                                <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                            </CollapsibleTrigger>
+                        </SidebarGroupLabel>
+                        <CollapsibleContent>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {projectsLoading ? (
+                                        // Loading skeleton
+                                        Array.from({ length: 3 }).map((_, index) => (
+                                            <SidebarMenuItem key={index}>
+                                                <SidebarMenuSkeleton showIcon />
+                                            </SidebarMenuItem>
+                                        ))
+                                    ) : ownProjects.length === 0 ? (
+                                        // Empty state
+                                        <SidebarMenuItem>
+                                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                                No projects yet
+                                            </div>
+                                        </SidebarMenuItem>
+                                    ) : (
+                                        // Projects list
+                                        visibleOwnProjects.map(renderProjectItem)
+                                    )}
+                                    {!projectsLoading && hasMoreOwnProjects && (
+                                        <SidebarMenuItem>
+                                            <SidebarMenuButton asChild>
+                                                <Link href="/app/project">
+                                                    <span className="text-sm text-muted-foreground">View more</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    )}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </CollapsibleContent>
+                    </SidebarGroup>
+                </Collapsible>
+
+                {/* Proyectos compartidos - Grupo Colapsable */}
+                <Collapsible className="group/collapsible">
+                    <SidebarGroup>
+                        <SidebarGroupLabel asChild>
+                            <CollapsibleTrigger className="w-full">
+                                Shared
+                                <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                            </CollapsibleTrigger>
+                        </SidebarGroupLabel>
+                        <CollapsibleContent>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {projectsLoading ? (
+                                        Array.from({ length: 3 }).map((_, index) => (
+                                            <SidebarMenuItem key={index}>
+                                                <SidebarMenuSkeleton showIcon />
+                                            </SidebarMenuItem>
+                                        ))
+                                    ) : sharedProjects.length === 0 ? (
+                                        <SidebarMenuItem>
+                                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                                No shared projects
+                                            </div>
+                                        </SidebarMenuItem>
+                                    ) : (
+                                        visibleSharedProjects.map(renderProjectItem)
+                                    )}
+                                    {!projectsLoading && hasMoreSharedProjects && (
+                                        <SidebarMenuItem>
+                                            <SidebarMenuButton asChild>
+                                                <Link href="/app/project">
+                                                    <span className="text-sm text-muted-foreground">View more</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    )}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </CollapsibleContent>
+                    </SidebarGroup>
+                </Collapsible>
+
             </SidebarContent>
 
             <SidebarFooter>
@@ -297,15 +359,18 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                                 </SidebarMenuButton>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
-                                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-                                side="bottom"
-                                align="end"
+                                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg mb-2"
+                                side="right"
+                                align="start"
                                 sideOffset={4}
                             >
-                                <DropdownMenuItem>
-                                    <User2 className="mr-2 size-4" />
-                                    <span>Account</span>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/app/profile">
+                                        <User2 className="mr-2 size-4" />
+                                        <span>Account</span>
+                                    </Link>
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => logout()}>
                                     <LogOut className="mr-2 size-4" />
                                     <span>Log out</span>

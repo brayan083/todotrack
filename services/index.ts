@@ -12,3 +12,4 @@ export { ProjectService, type Project } from './project.service';
 export { ClientService, type Client } from './client.service';
 export { ActivityLogService, type ActivityLog, type LogActionInput } from './activity-log.service';
 export { InvitationService, type Invitation, type InvitationStatus } from './invitation.service';
+export { TagService, type Tag } from './tag.service';

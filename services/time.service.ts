@@ -10,9 +10,11 @@ import {
   getDocs, 
   addDoc, 
   updateDoc, 
+  deleteDoc,
   query, 
   where,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore';
 
 export interface TimeEntry {
@@ -24,6 +26,9 @@ export interface TimeEntry {
   startTime: Date;
   endTime?: Date;
   duration?: number;
+  isPaused?: boolean;
+  pauseStartedAt?: Date | null;
+  pausedSeconds?: number;
   entryType: string;
   isManual: boolean;
   isEdited: boolean;
@@ -72,6 +77,9 @@ export class TimeService extends BaseService {
         startTime: serverTimestamp(),
         endTime: null,
         duration: 0,
+        isPaused: false,
+        pauseStartedAt: null,
+        pausedSeconds: 0,
         entryType: data.entryType || 'normal',
         isManual: false,
         isEdited: false,
@@ -91,16 +99,51 @@ export class TimeService extends BaseService {
    * Detiene un temporizador
    * @param entryId - ID de la entrada de tiempo
    */
-  public async stopTimer(entryId: string, durationSeconds: number): Promise<void> {
+  public async stopTimer(entryId: string, durationSeconds: number, endTime: Date): Promise<void> {
     try {
       const entryRef = doc(this.db, this.collectionName, entryId);
       await updateDoc(entryRef, {
-        endTime: serverTimestamp(),
+        endTime: Timestamp.fromDate(endTime),
         duration: durationSeconds,
       });
     } catch (error: any) {
       console.error('Error al detener temporizador:', error);
       throw new Error(`Error al detener temporizador: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualiza el estado de pausa de un temporizador activo
+   * @param entryId - ID de la entrada de tiempo
+   */
+  public async updateTimerPauseState(
+    entryId: string,
+    updates: { isPaused?: boolean; pauseStartedAt?: Date | null; pausedSeconds?: number }
+  ): Promise<void> {
+    try {
+      const entryRef = doc(this.db, this.collectionName, entryId);
+      const payload: Record<string, any> = {};
+
+      if (updates.isPaused !== undefined) {
+        payload.isPaused = updates.isPaused;
+      }
+      if (updates.pauseStartedAt !== undefined) {
+        payload.pauseStartedAt = updates.pauseStartedAt
+          ? Timestamp.fromDate(updates.pauseStartedAt)
+          : null;
+      }
+      if (updates.pausedSeconds !== undefined) {
+        payload.pausedSeconds = updates.pausedSeconds;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        return;
+      }
+
+      await updateDoc(entryRef, payload);
+    } catch (error: any) {
+      console.error('Error al actualizar pausa del temporizador:', error);
+      throw new Error(`Error al actualizar pausa: ${error.message}`);
     }
   }
 
@@ -128,6 +171,9 @@ export class TimeService extends BaseService {
           startTime: data.startTime?.toDate() || new Date(),
           endTime: data.endTime?.toDate() || undefined,
           duration: data.duration || 0,
+          isPaused: data.isPaused || false,
+          pauseStartedAt: data.pauseStartedAt?.toDate() || null,
+          pausedSeconds: data.pausedSeconds || 0,
           entryType: data.entryType || 'normal',
           isManual: data.isManual || false,
           isEdited: data.isEdited || false,
@@ -201,6 +247,20 @@ export class TimeService extends BaseService {
     } catch (error: any) {
       console.error('Error al editar entrada de tiempo:', error);
       throw new Error(`Error al editar entrada: ${error.message}`);
+    }
+  }
+
+  /**
+   * Elimina una entrada de tiempo
+   * @param entryId - ID de la entrada
+   */
+  public async deleteTimeEntry(entryId: string): Promise<void> {
+    try {
+      const entryRef = doc(this.db, this.collectionName, entryId);
+      await deleteDoc(entryRef);
+    } catch (error: any) {
+      console.error('Error al eliminar entrada de tiempo:', error);
+      throw new Error(`Error al eliminar entrada: ${error.message}`);
     }
   }
 }

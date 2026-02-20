@@ -1,9 +1,14 @@
+"use client";
+
 import React from 'react';
 import Link from 'next/link';
 import { ArrowRight, Clock, CheckSquare, BarChart3, Zap, Users, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuthStore } from '@/stores';
 
 const Landing: React.FC = () => {
+  const { user } = useAuthStore();
+  const isLoggedIn = !!user;
   return (
     <div className="bg-background text-foreground font-display antialiased selection:bg-primary selection:text-white">
       <nav className="fixed w-full z-50 top-0 left-0 border-b border-border bg-background/80 backdrop-blur-md">
@@ -21,12 +26,20 @@ const Landing: React.FC = () => {
               <a href="#" className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors">Documentación</a>
             </div>
             <div className="flex items-center gap-4">
-              <Button asChild variant="ghost" className="hidden md:flex">
-                <Link href="/login">Iniciar sesión</Link>
-              </Button>
-              <Button asChild className="shadow-lg shadow-primary/25">
-                <Link href="/register">Comenzar gratis</Link>
-              </Button>
+              {isLoggedIn ? (
+                <Button asChild className="shadow-lg shadow-primary/25">
+                  <Link href="/app/dashboard">Ir al panel</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button asChild variant="ghost" className="hidden md:flex">
+                    <Link href="/login">Iniciar sesión</Link>
+                  </Button>
+                  <Button asChild className="shadow-lg shadow-primary/25">
+                    <Link href="/register">Comenzar gratis</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -48,8 +61,8 @@ const Landing: React.FC = () => {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Button asChild size="lg" className="h-14 font-semibold text-lg shadow-xl shadow-primary/20 group">
-              <Link href="/register">
-                Comienza ahora - es gratis
+              <Link href={isLoggedIn ? "/app/dashboard" : "/register"}>
+                {isLoggedIn ? 'Ir al panel' : 'Comienza ahora - es gratis'}
                 <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </Button>

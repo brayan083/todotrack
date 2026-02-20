@@ -23,7 +23,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { TaskService, type Task } from '@/services';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { TagService, TaskService, type Task } from '@/services';
 import { db } from '@/lib/firebase.config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -55,6 +64,7 @@ export function CreateTaskDialog({
   onTaskCreated,
   disabled = false,
 }: CreateTaskDialogProps) {
+  const assigneeOptions = assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }];
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +73,9 @@ export function CreateTaskDialog({
     description: '',
     priority: 'medium',
     status: 'todo',
-    assigneeId: assignees.length > 0 ? assignees[0].uid : userId,
+    assigneeIds: assigneeOptions.length > 0 ? [assigneeOptions[0].uid] : [userId],
     dueDate: '',
+    tags: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,6 +90,7 @@ export function CreateTaskDialog({
     try {
       setLoading(true);
       const taskService = TaskService.getInstance(db);
+      const tagService = TagService.getInstance(db);
 
       // Obtener todas las tareas del proyecto para calcular la posición
       const existingTasks = await taskService.getAllTasks(userId, projectId);
@@ -86,15 +98,25 @@ export function CreateTaskDialog({
         ? Math.max(...existingTasks.map(t => t.position || 0))
         : 0;
 
+      const tagNames = formData.tags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+      const tags = tagNames.length > 0
+        ? await tagService.getOrCreateTagsByName(projectId, tagNames)
+        : [];
+
       const newTask: Omit<Task, 'id' | 'createdAt'> = {
         projectId,
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
         status: formData.status,
-        assigneeId: formData.assigneeId || userId,
+        assigneeIds: formData.assigneeIds,
+        assigneeId: formData.assigneeIds[0] || "",
         position: maxPosition + 1,
         dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
         priority: formData.priority,
+        tagIds: tags.map((tag) => tag.id),
       };
 
       const taskId = await taskService.createTask(newTask);
@@ -114,8 +136,9 @@ export function CreateTaskDialog({
         description: '',
         priority: 'medium',
         status: 'todo',
-        assigneeId: assignees.length > 0 ? assignees[0].uid : userId,
+        assigneeIds: assigneeOptions.length > 0 ? [assigneeOptions[0].uid] : [userId],
         dueDate: '',
+        tags: '',
       });
       
       setOpen(false);
@@ -130,6 +153,19 @@ export function CreateTaskDialog({
     if (disabled) return;
     setOpen(nextOpen);
   };
+
+  const toggleAssignee = (assigneeId: string) => {
+    setFormData((prev) => {
+      const nextIds = prev.assigneeIds.includes(assigneeId)
+        ? prev.assigneeIds.filter((id) => id !== assigneeId)
+        : [...prev.assigneeIds, assigneeId];
+      return { ...prev, assigneeIds: nextIds };
+    });
+  };
+
+  const selectedAssignees = assigneeOptions.filter((assignee) =>
+    formData.assigneeIds.includes(assignee.uid)
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -215,34 +251,33 @@ export function CreateTaskDialog({
           {/* Assignee */}
           <div className="space-y-2">
             <Label htmlFor="assignee">Assignee</Label>
-            <Select
-              value={formData.assigneeId}
-              onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
-            >
-              <SelectTrigger id="assignee" disabled={loading}>
-                <SelectValue>
-                  {(() => {
-                    const selected = (assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }]).find(
-                      (a) => a.uid === formData.assigneeId
-                    );
-                    if (!selected) return null;
-                    return (
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-5 w-5">
-                          {selected.photoURL && <AvatarImage src={selected.photoURL} />}
-                          <AvatarFallback className="text-xs">
-                            {selected.label.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span>{selected.label}</span>
-                      </div>
-                    );
-                  })()}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {(assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }]).map((assignee) => (
-                  <SelectItem key={assignee.uid} value={assignee.uid}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  disabled={loading}
+                >
+                  {selectedAssignees.length > 0 ? (
+                    <span className="truncate">
+                      {selectedAssignees.slice(0, 2).map((assignee) => assignee.label).join(", ")}
+                      {selectedAssignees.length > 2 ? ` +${selectedAssignees.length - 2}` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Unassigned</span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel>Assign to</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {assigneeOptions.map((assignee) => (
+                  <DropdownMenuCheckboxItem
+                    key={assignee.uid}
+                    checked={formData.assigneeIds.includes(assignee.uid)}
+                    onCheckedChange={() => toggleAssignee(assignee.uid)}
+                  >
                     <div className="flex items-center gap-2">
                       <Avatar className="h-5 w-5">
                         {assignee.photoURL && <AvatarImage src={assignee.photoURL} />}
@@ -252,10 +287,14 @@ export function CreateTaskDialog({
                       </Avatar>
                       <span>{assignee.label}</span>
                     </div>
-                  </SelectItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
-              </SelectContent>
-            </Select>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setFormData({ ...formData, assigneeIds: [] })}>
+                  Clear selection
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Due Date */}
@@ -266,6 +305,18 @@ export function CreateTaskDialog({
               type="date"
               value={formData.dueDate}
               onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+              disabled={loading}
+            />
+          </div>
+
+          {/* Tags */}
+          <div className="space-y-2">
+            <Label htmlFor="tags">Tags</Label>
+            <Input
+              id="tags"
+              placeholder="#meeting, #development"
+              value={formData.tags}
+              onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
               disabled={loading}
             />
           </div>

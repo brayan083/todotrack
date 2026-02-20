@@ -49,12 +49,27 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   startTimer: async (userId: string, data: StartTimerInput) => {
     try {
       const timeService = TimeService.getInstance(db);
+      const calculateDurationSeconds = (endTime: Date) => {
+        const { activeEntry, pausedSeconds, pauseStartedAt, isPaused } = get();
+        if (!activeEntry?.startTime) {
+          return 0;
+        }
+        let totalPaused = pausedSeconds;
+        if (isPaused && pauseStartedAt) {
+          totalPaused += differenceInSeconds(endTime, pauseStartedAt);
+        }
+        return Math.max(0, differenceInSeconds(endTime, activeEntry.startTime) - totalPaused);
+      };
       
       // Detener cualquier temporizador activo
       const currentEntry = get().activeEntry;
       if (currentEntry) {
-        const currentElapsed = get().elapsedSeconds;
-        await timeService.stopTimer(currentEntry.id, currentElapsed);
+        const endTime = new Date();
+        const durationSeconds = calculateDurationSeconds(endTime);
+        await timeService.stopTimer(currentEntry.id, durationSeconds, endTime);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('timesheet:refresh'));
+        }
       }
       
       // Iniciar nuevo temporizador
@@ -68,6 +83,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         startTime: new Date(),
         endTime: undefined,
         duration: 0,
+        isPaused: false,
+        pauseStartedAt: null,
+        pausedSeconds: 0,
         entryType: data.entryType || 'normal',
         isManual: false,
         isEdited: false,
@@ -102,13 +120,29 @@ export const useTimerStore = create<TimerState>((set, get) => ({
    * Pausa el temporizador activo
    */
   pauseTimer: () => {
-    const { intervalId, isRunning, isPaused } = get();
+    const { activeEntry, intervalId, isRunning, isPaused } = get();
     if (!isRunning || isPaused) {
       return;
     }
 
     if (intervalId) {
       clearInterval(intervalId);
+    }
+
+    if (activeEntry) {
+      const timeService = TimeService.getInstance(db);
+      const pauseStartedAt = new Date();
+      void timeService.updateTimerPauseState(activeEntry.id, {
+        isPaused: true,
+        pauseStartedAt,
+      });
+      set({
+        isPaused: true,
+        pauseStartedAt,
+        intervalId: null,
+        activeEntry: { ...activeEntry, isPaused: true, pauseStartedAt },
+      });
+      return;
     }
 
     set({ isPaused: true, pauseStartedAt: new Date(), intervalId: null });
@@ -118,7 +152,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
    * Reanuda el temporizador activo
    */
   resumeTimer: () => {
-    const { isRunning, isPaused, pauseStartedAt, pausedSeconds } = get();
+    const { activeEntry, isRunning, isPaused, pauseStartedAt, pausedSeconds } = get();
     if (!isRunning || !isPaused) {
       return;
     }
@@ -131,11 +165,23 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       get().updateElapsed();
     }, 1000);
 
+    if (activeEntry) {
+      const timeService = TimeService.getInstance(db);
+      void timeService.updateTimerPauseState(activeEntry.id, {
+        isPaused: false,
+        pauseStartedAt: null,
+        pausedSeconds: updatedPaused,
+      });
+    }
+
     set({
       isPaused: false,
       pauseStartedAt: null,
       pausedSeconds: updatedPaused,
       intervalId,
+      activeEntry: activeEntry
+        ? { ...activeEntry, isPaused: false, pauseStartedAt: null, pausedSeconds: updatedPaused }
+        : null,
     });
   },
 
@@ -144,19 +190,24 @@ export const useTimerStore = create<TimerState>((set, get) => ({
    */
   stopTimer: async () => {
     try {
-      const { activeEntry, intervalId, isPaused } = get();
+      const { activeEntry, intervalId, isPaused, pauseStartedAt, pausedSeconds } = get();
       
       if (!activeEntry) {
-        throw new Error('No hay temporizador activo');
+        return;
       }
-      
-      if (!isPaused) {
-        get().updateElapsed();
+
+      const endTime = new Date();
+      let totalPaused = pausedSeconds;
+      if (isPaused && pauseStartedAt) {
+        totalPaused += differenceInSeconds(endTime, pauseStartedAt);
       }
 
       const timeService = TimeService.getInstance(db);
-      const durationSeconds = get().elapsedSeconds;
-      await timeService.stopTimer(activeEntry.id, durationSeconds);
+      const durationSeconds = Math.max(
+        0,
+        differenceInSeconds(endTime, activeEntry.startTime) - totalPaused
+      );
+      await timeService.stopTimer(activeEntry.id, durationSeconds, endTime);
       
       // Registrar actividad
       const user = useAuthStore.getState().user;
@@ -191,6 +242,10 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         elapsedSeconds: 0,
         intervalId: null 
       });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('timesheet:refresh'));
+      }
     } catch (error) {
       console.error('Error al detener temporizador:', error);
       throw error;
@@ -219,29 +274,39 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       clearInterval(intervalId);
     }
 
+    const isPaused = entry?.isPaused || false;
+    const pauseStartedAt = entry?.pauseStartedAt || null;
+    const pausedSeconds = entry?.pausedSeconds || 0;
+
     set({
       activeEntry: entry,
       isRunning: entry !== null,
-      isPaused: false,
-      pauseStartedAt: null,
-      pausedSeconds: 0,
+      isPaused,
+      pauseStartedAt,
+      pausedSeconds,
     });
     
     if (entry) {
       // Calcular el tiempo transcurrido inicial
-      const elapsed = differenceInSeconds(new Date(), entry.startTime);
+      const now = new Date();
+      const totalPaused = isPaused && pauseStartedAt
+        ? pausedSeconds + differenceInSeconds(now, pauseStartedAt)
+        : pausedSeconds;
+      const elapsed = Math.max(0, differenceInSeconds(now, entry.startTime) - totalPaused);
       set({
         elapsedSeconds: elapsed,
         taskId: entry.taskId || null,
         projectId: entry.projectId,
       });
       
-      // Iniciar el intervalo
-      const intervalId = setInterval(() => {
-        get().updateElapsed();
-      }, 1000);
-      
-      set({ intervalId });
+      if (!isPaused) {
+        // Iniciar el intervalo
+        const intervalId = setInterval(() => {
+          get().updateElapsed();
+        }, 1000);
+
+        set({ intervalId });
+      }
     }
   },
 

@@ -269,7 +269,8 @@ export function SimpleKanban() {
         projectId: 'default-project', // En producción, obtener del contexto
         title: 'Nueva Tarea',
         status,
-        assigneeId: 'current-user-id', // En producción, obtener del user actual
+        assigneeIds: ['current-user-id'], // En producción, obtener del user actual
+        assigneeId: 'current-user-id',
         position: 0, // En producción, calcular basado en tareas existentes
         priority: 'medium',
       });

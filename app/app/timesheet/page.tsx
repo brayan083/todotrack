@@ -1,78 +1,25 @@
 "use client";
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  TrendingUp,
-  Clock,
-  DollarSign,
-  Coffee,
-  Pencil,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth, useProjects, useTasks } from '@/hooks';
 import { TimeService, type TimeEntry } from '@/services/time.service';
+import { ClientService, type Client } from '@/services/client.service';
 import { UserService, type UserData } from '@/services/user.service';
 import { db } from '@/lib/firebase.config';
+import { TimesheetHeader } from './_components/timesheet-header';
+import { TimesheetFilters } from './_components/timesheet-filters';
+import { TimesheetStats } from './_components/timesheet-stats';
+import { TimesheetTable } from './_components/timesheet-table';
+import { TimesheetEntryDialog } from './_components/timesheet-entry-dialog';
+import { useTimesheetStats } from './_hooks/use-timesheet-stats';
+import type { EditFormState } from './_types';
 import {
   addWeeks,
-  differenceInCalendarDays,
   differenceInSeconds,
-  endOfDay,
   endOfWeek,
   format,
-  isWithinInterval,
-  startOfDay,
+  subDays,
   startOfWeek,
 } from 'date-fns';
-
-type EditFormState = {
-  projectId: string;
-  taskId: string;
-  description: string;
-  entryType: string;
-  tags: string;
-  startTime: string;
-  endTime: string;
-};
-
-const getDurationParts = (seconds: number) => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  return { hours, minutes, seconds: secs };
-};
-
-const formatDurationLabel = (seconds: number) => {
-  const parts = getDurationParts(seconds);
-  return `${parts.hours}h ${parts.minutes}m ${parts.seconds}s`;
-};
-
-const formatDurationClock = (seconds: number) => {
-  const parts = getDurationParts(seconds);
-  return `${parts.hours.toString().padStart(2, '0')}:${parts.minutes
-    .toString()
-    .padStart(2, '0')}:${parts.seconds.toString().padStart(2, '0')}`;
-};
-
-const toDateTimeLocalValue = (value?: Date) => {
-  if (!value) return '';
-  return format(value, "yyyy-MM-dd'T'HH:mm");
-};
 
 const Timesheet: React.FC = () => {
   const { user } = useAuth();
@@ -83,6 +30,14 @@ const Timesheet: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
+  const [selectedClientId, setSelectedClientId] = useState('all');
+  const [selectedUserId, setSelectedUserId] = useState('all');
+  const [selectedTaskId, setSelectedTaskId] = useState('all');
+  const [dateFrom, setDateFrom] = useState(() =>
+    format(subDays(new Date(), 6), 'yyyy-MM-dd')
+  );
+  const [dateTo, setDateTo] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [clients, setClients] = useState<Client[]>([]);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [editOpen, setEditOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
@@ -93,11 +48,14 @@ const Timesheet: React.FC = () => {
     description: '',
     entryType: 'normal',
     tags: '',
+    entryDate: '',
     startTime: '',
     endTime: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart]);
 
@@ -106,33 +64,74 @@ const Timesheet: React.FC = () => {
     return map;
   }, [projects]);
 
+  const projectOptions = useMemo(
+    () => projects.map((project) => ({ value: project.id, label: project.name })),
+    [projects]
+  );
+
   const taskLookup = useMemo(() => {
     const map = new Map(tasks.map((task) => [task.id, task] as const));
     return map;
   }, [tasks]);
 
+  const taskOptions = useMemo(() => {
+    const filteredTasks =
+      selectedProjectId === 'all'
+        ? tasks
+        : tasks.filter((task) => task.projectId === selectedProjectId);
+    return filteredTasks.map((task) => ({ value: task.id, label: task.title }));
+  }, [tasks, selectedProjectId]);
+
   useEffect(() => {
+    if (selectedTaskId === 'all') return;
+    const exists = tasks.some(
+      (task) => task.id === selectedTaskId &&
+        (selectedProjectId === 'all' || task.projectId === selectedProjectId)
+    );
+    if (!exists) {
+      setSelectedTaskId('all');
+    }
+  }, [selectedTaskId, selectedProjectId, tasks]);
+
+  const loadEntries = useCallback(async () => {
     if (!user) {
       setEntries([]);
+      setLoading(false);
+      setError(null);
       return;
     }
 
-    const loadEntries = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const timeService = TimeService.getInstance(db);
-        const data = await timeService.getTimerEntries(user.uid);
-        setEntries(data);
-      } catch (loadError: any) {
-        setError(loadError?.message || 'Error loading time entries');
-      } finally {
-        setLoading(false);
-      }
+    setLoading(true);
+    setError(null);
+    try {
+      const timeService = TimeService.getInstance(db);
+      const data = await timeService.getTimerEntries(user.uid);
+      setEntries(data);
+    } catch (loadError: any) {
+      setError(loadError?.message || 'Error loading time entries');
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void loadEntries();
+  }, [loadEntries]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleRefresh = () => {
+      void loadEntries();
     };
 
-    loadEntries();
-  }, [user]);
+    window.addEventListener('timesheet:refresh', handleRefresh);
+    return () => {
+      window.removeEventListener('timesheet:refresh', handleRefresh);
+    };
+  }, [loadEntries]);
 
   useEffect(() => {
     if (!entries.length) {
@@ -173,68 +172,100 @@ const Timesheet: React.FC = () => {
     loadUsers();
   }, [entries, usersById]);
 
-  const filteredEntries = useMemo(() => {
-    const range = {
-      start: startOfDay(weekStart),
-      end: endOfDay(weekEnd),
-    };
-
-    return entries
-      .filter((entry) =>
-        selectedProjectId === 'all' ? true : entry.projectId === selectedProjectId
-      )
-      .filter((entry) => isWithinInterval(entry.startTime, range))
-      .sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
-  }, [entries, selectedProjectId, weekStart, weekEnd]);
-
-  const previousWeekTotals = useMemo(() => {
-    const prevStart = startOfWeek(addWeeks(weekStart, -1), { weekStartsOn: 1 });
-    const prevEnd = endOfWeek(prevStart, { weekStartsOn: 1 });
-    const range = { start: startOfDay(prevStart), end: endOfDay(prevEnd) };
-
-    return entries
-      .filter((entry) => isWithinInterval(entry.startTime, range))
-      .reduce((total, entry) => total + getEntryDurationSeconds(entry), 0);
-  }, [entries, weekStart]);
-
-  const isEntryBillable = (entry: TimeEntry) => {
-    if (entry.tags?.includes('non-billable') || entry.entryType === 'non-billable') {
-      return false;
+  useEffect(() => {
+    if (!user) {
+      setClients([]);
+      return;
     }
-    if (!entry.taskId) {
-      return false;
+
+    const clientService = ClientService.getInstance(db);
+    const subscription = clientService.getClientsByOwner(user.uid).subscribe({
+      next: (clientList) => setClients(clientList),
+      error: (loadError) => {
+        console.error('Error loading clients:', loadError);
+      },
+    });
+
+    return () => subscription.unsubscribe();
+  }, [user]);
+
+  const clientOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const seen = new Set<string>();
+
+    clients.forEach((client) => {
+      if (!seen.has(client.id)) {
+        options.push({ value: client.id, label: client.name });
+        seen.add(client.id);
+      }
+    });
+
+    projects.forEach((project) => {
+      if (project.clientName && !project.clientId) {
+        const value = `name:${project.clientName}`;
+        if (!seen.has(value)) {
+          options.push({ value, label: project.clientName });
+          seen.add(value);
+        }
+      }
+    });
+
+    return options;
+  }, [clients, projects]);
+
+  const userOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const ids = new Set<string>();
+
+    if (user?.uid) {
+      ids.add(user.uid);
     }
-    const project = projectLookup.get(entry.projectId);
-    return Boolean(project?.clientId || project?.clientName || project?.hourlyRate);
-  };
 
-  const totalSeconds = filteredEntries.reduce((total, entry) => total + getEntryDurationSeconds(entry), 0);
-  const billableSeconds = filteredEntries.reduce(
-    (total, entry) => total + (isEntryBillable(entry) ? getEntryDurationSeconds(entry) : 0),
-    0
-  );
-  const nonBillableSeconds = Math.max(0, totalSeconds - billableSeconds);
+    entries.forEach((entry) => ids.add(entry.userId));
 
-  const dayCount = Math.max(1, differenceInCalendarDays(weekEnd, weekStart) + 1);
-  const avgDailySeconds = Math.round(totalSeconds / dayCount);
-  const percentBillable = totalSeconds > 0 ? (billableSeconds / totalSeconds) * 100 : 0;
-  const activeProjectCount = new Set(filteredEntries.map((entry) => entry.projectId)).size;
-  const activeProjectRatio = projects.length > 0 ? (activeProjectCount / projects.length) * 100 : 0;
+    ids.forEach((id) => {
+      const entryUser = usersById[id];
+      const label = entryUser?.displayName || entryUser?.email || id.slice(0, 8);
+      options.push({ value: id, label });
+    });
 
-  const totalLabel = formatDurationLabel(totalSeconds);
-  const billableLabel = formatDurationLabel(billableSeconds);
-  const nonBillableLabel = formatDurationLabel(nonBillableSeconds);
+    return options;
+  }, [entries, usersById, user]);
 
-  const totalParts = getDurationParts(totalSeconds);
-  const billableParts = getDurationParts(billableSeconds);
-  const nonBillableParts = getDurationParts(nonBillableSeconds);
-  const avgDailyParts = getDurationParts(avgDailySeconds);
+  const parsedDateFrom = useMemo(() => {
+    if (!dateFrom) return null;
+    const parsed = new Date(`${dateFrom}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [dateFrom]);
 
-  const billableRatio = totalSeconds > 0 ? (billableSeconds / totalSeconds) * 100 : 0;
-  const nonBillableRatio = totalSeconds > 0 ? (nonBillableSeconds / totalSeconds) * 100 : 0;
-  const percentChange = previousWeekTotals > 0
-    ? ((totalSeconds - previousWeekTotals) / previousWeekTotals) * 100
-    : null;
+  const parsedDateTo = useMemo(() => {
+    if (!dateTo) return null;
+    const parsed = new Date(`${dateTo}T23:59:59`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [dateTo]);
+
+  const {
+    filteredEntries,
+    isEntryBillable,
+    totalParts,
+    avgDailyParts,
+    percentBillable,
+    percentChange,
+    activeProjectCount,
+    activeProjectRatio,
+  } = useTimesheetStats({
+    entries,
+    projects,
+    selectedProjectId,
+    selectedClientId,
+    selectedUserId,
+    selectedTaskId,
+    dateFrom: parsedDateFrom,
+    dateTo: parsedDateTo,
+    weekStart,
+    weekEnd,
+    projectLookup,
+  });
 
   const handlePreviousWeek = () => {
     setWeekStart((current) => startOfWeek(addWeeks(current, -1), { weekStartsOn: 1 }));
@@ -254,10 +285,40 @@ const Timesheet: React.FC = () => {
       description: entry.description || '',
       entryType: entry.entryType || 'normal',
       tags: entry.tags?.join(', ') || '',
-      startTime: toDateTimeLocalValue(entry.startTime),
-      endTime: toDateTimeLocalValue(entry.endTime),
+      entryDate: format(entry.startTime, 'yyyy-MM-dd'),
+      startTime: format(entry.startTime, 'HH:mm'),
+      endTime: entry.endTime ? format(entry.endTime, 'HH:mm') : '',
     });
     setEditOpen(true);
+  };
+
+  const handleDeleteEntry = async (entry: TimeEntry) => {
+    if (!user) {
+      setDeleteError('Sign in to delete entries.');
+      return;
+    }
+
+    if (!entry.endTime) {
+      setDeleteError('Stop the timer before deleting this entry.');
+      return;
+    }
+
+    const confirmed = window.confirm('Delete this time entry? This action cannot be undone.');
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleteError(null);
+    setIsDeleting(true);
+    try {
+      const timeService = TimeService.getInstance(db);
+      await timeService.deleteTimeEntry(entry.id);
+      setEntries((prev) => prev.filter((item) => item.id !== entry.id));
+    } catch (deleteErr: any) {
+      setDeleteError(deleteErr?.message || 'Error deleting entry.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const openCreateDialog = () => {
@@ -271,7 +332,8 @@ const Timesheet: React.FC = () => {
       description: '',
       entryType: 'normal',
       tags: '',
-      startTime: toDateTimeLocalValue(now),
+      entryDate: format(now, 'yyyy-MM-dd'),
+      startTime: format(now, 'HH:mm'),
       endTime: '',
     });
     setEditOpen(true);
@@ -289,20 +351,41 @@ const Timesheet: React.FC = () => {
     }
 
     setEditError(null);
-    const startTime = editForm.startTime ? new Date(editForm.startTime) : null;
-    const endTime = editForm.endTime ? new Date(editForm.endTime) : null;
+    if (!editForm.entryDate) {
+      setEditError('Date is required.');
+      return;
+    }
 
-    if (!startTime) {
+    if (!editForm.startTime) {
       setEditError('Start time is required.');
       return;
     }
 
-    if (endTime && endTime < startTime) {
+    if (!editForm.endTime) {
+      setEditError('End time is required.');
+      return;
+    }
+
+    const startTime = new Date(`${editForm.entryDate}T${editForm.startTime}`);
+    const endTime = new Date(`${editForm.entryDate}T${editForm.endTime}`);
+
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+      setEditError('Invalid date or time.');
+      return;
+    }
+
+    if (endTime < startTime) {
       setEditError('End time must be after start time.');
       return;
     }
 
-    const durationSeconds = endTime ? Math.max(0, differenceInSeconds(endTime, startTime)) : 0;
+    const now = new Date();
+    if (startTime > now || endTime > now) {
+      setEditError('Entries must be in the past.');
+      return;
+    }
+
+    const durationSeconds = Math.max(0, differenceInSeconds(endTime, startTime));
     const tags = editForm.tags
       .split(',')
       .map((tag) => tag.trim())
@@ -319,7 +402,7 @@ const Timesheet: React.FC = () => {
         entryType: editForm.entryType,
         tags,
         startTime,
-        endTime: endTime || undefined,
+        endTime,
         duration: durationSeconds,
         isEdited: false,
         originalData: null,
@@ -339,7 +422,7 @@ const Timesheet: React.FC = () => {
                 entryType: editForm.entryType,
                 tags,
                 startTime,
-                endTime: endTime || undefined,
+                endTime,
                 duration: durationSeconds,
                 isEdited: true,
               }
@@ -357,7 +440,7 @@ const Timesheet: React.FC = () => {
           entryType: editForm.entryType,
           tags,
           startTime,
-          endTime: endTime || undefined,
+          endTime,
           duration: durationSeconds,
           isManual: true,
           isEdited: false,
@@ -391,338 +474,79 @@ const Timesheet: React.FC = () => {
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold mb-1">Timesheet History</h1>
-          <p className="text-muted-foreground text-sm">Review your tracked hours and manage entries.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <TimesheetHeader
+        onCreateEntry={openCreateDialog}
+      />
 
-          <div className="flex items-center bg-card border border-input rounded-md p-0.5">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-sm" onClick={handlePreviousWeek}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center gap-2 px-3 py-1">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">
-                {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}
-              </span>
-            </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-sm" onClick={handleNextWeek}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+      <TimesheetFilters
+        projectOptions={projectOptions}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={setSelectedProjectId}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        clientOptions={clientOptions}
+        selectedClientId={selectedClientId}
+        onClientChange={setSelectedClientId}
+        userOptions={userOptions}
+        selectedUserId={selectedUserId}
+        onUserChange={setSelectedUserId}
+        taskOptions={taskOptions}
+        selectedTaskId={selectedTaskId}
+        onTaskChange={setSelectedTaskId}
+        onClearFilters={() => {
+          setDateFrom(format(subDays(new Date(), 6), 'yyyy-MM-dd'));
+          setDateTo(format(new Date(), 'yyyy-MM-dd'));
+          setSelectedProjectId('all');
+          setSelectedClientId('all');
+          setSelectedUserId('all');
+          setSelectedTaskId('all');
+        }}
+      />
 
-          <Button className="hidden md:flex gap-2" onClick={openCreateDialog}>
-            <span>New Entry</span>
-          </Button>
-        </div>
-      </div>
+      <TimesheetStats
+        totalParts={totalParts}
+        avgDailyParts={avgDailyParts}
+        percentBillable={percentBillable}
+        percentChange={percentChange}
+        activeProjectCount={activeProjectCount}
+        projectsLength={projects.length}
+        activeProjectRatio={activeProjectRatio}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-card border border-border rounded-xl p-5 flex items-center justify-between relative overflow-hidden group shadow-sm">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="relative z-10">
-            <p className="text-sm font-medium text-muted-foreground mb-1">Total Hours</p>
-            <h3 className="text-3xl font-bold">
-              {totalParts.hours}
-              <span className="text-lg text-muted-foreground font-normal">h</span>{' '}
-              {totalParts.minutes}
-              <span className="text-lg text-muted-foreground font-normal">m</span>
-              {' '}
-              {totalParts.seconds}
-              <span className="text-lg text-muted-foreground font-normal">s</span>
-            </h3>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-              {percentChange === null ? (
-                'No data last week'
-              ) : (
-                <>
-                  <TrendingUp className="h-3 w-3" />
-                  {percentChange >= 0 ? '+' : ''}{percentChange.toFixed(1)}% vs last week
-                </>
-              )}
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary relative z-10">
-            <Clock className="h-6 w-6" />
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-5 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Daily Average</p>
-            <h3 className="text-3xl font-bold">
-              {avgDailyParts.hours}
-              <span className="text-lg text-muted-foreground font-normal">h</span>{' '}
-              {avgDailyParts.minutes}
-              <span className="text-lg text-muted-foreground font-normal">m</span>
-              {' '}
-              {avgDailyParts.seconds}
-              <span className="text-lg text-muted-foreground font-normal">s</span>
-            </h3>
-            <div className="w-32 h-1 bg-secondary rounded-full mt-3 overflow-hidden">
-              <div className="h-full bg-green-500" style={{ width: `${percentBillable}%` }}></div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              {percentBillable.toFixed(1)}% billable
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
-            <DollarSign className="h-6 w-6" />
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-xl p-5 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Active Projects</p>
-            <h3 className="text-3xl font-bold">
-              {activeProjectCount}
-              <span className="text-lg text-muted-foreground font-normal"> / {projects.length}</span>
-            </h3>
-            <div className="w-32 h-1 bg-secondary rounded-full mt-3 overflow-hidden">
-              <div className="h-full bg-orange-500" style={{ width: `${activeProjectRatio}%` }}></div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              In this range
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500">
-            <Coffee className="h-6 w-6" />
-          </div>
-        </div>
-      </div>
+      <TimesheetTable
+        user={user}
+        loading={loading}
+        error={error}
+        entries={filteredEntries}
+        projectLookup={projectLookup}
+        taskLookup={taskLookup}
+        usersById={usersById}
+        onEditEntry={openEditDialog}
+        onDeleteEntry={handleDeleteEntry}
+        isEntryBillable={isEntryBillable}
+      />
 
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-32">Date</TableHead>
-              <TableHead className="w-48">User</TableHead>
-              <TableHead className="w-48">Project</TableHead>
-              <TableHead>Task Name</TableHead>
-              <TableHead className="w-32 text-right">Duration</TableHead>
-              <TableHead className="w-24 text-center">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!user && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  Sign in to view timesheets.
-                </TableCell>
-              </TableRow>
-            )}
-            {user && !loading && error && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  {error}
-                </TableCell>
-              </TableRow>
-            )}
-            {user && loading && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  Loading entries...
-                </TableCell>
-              </TableRow>
-            )}
-            {user && !loading && !error && filteredEntries.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  No entries for this range.
-                </TableCell>
-              </TableRow>
-            )}
-            {filteredEntries.map((entry) => {
-              const project = projectLookup.get(entry.projectId);
-              const task = entry.taskId ? taskLookup.get(entry.taskId) : null;
-              const entryUser = usersById[entry.userId];
-              const entryUserLabel = entryUser?.displayName || entryUser?.email || entry.userId.slice(0, 8);
-              const durationSeconds = getEntryDurationSeconds(entry);
-              const isBillable = isEntryBillable(entry);
+      {deleteError && (
+        <p className="text-sm text-destructive">{deleteError}</p>
+      )}
 
-              return (
-                <TableRow key={entry.id}>
-                  <TableCell className="font-medium text-muted-foreground">
-                    {format(entry.startTime, 'MMM d, EEE')}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {entryUser?.photoURL && (
-                      <img src={entryUser.photoURL} alt={entryUserLabel} className="w-6 h-6 rounded-full mr-2 inline-block align-middle" />
-                    )}
-                    {entryUserLabel}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: project?.color || '#94a3b8' }}
-                      ></div>
-                      {project?.name || 'Unknown project'}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium">
-                      {task?.title || entry.description || 'Untitled entry'}
-                    </span>
-                    {isBillable && (
-                      <Badge variant="outline" className="ml-2 text-xs font-normal">Billable</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">{formatDurationClock(durationSeconds)}</TableCell>
-                  <TableCell className="text-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      onClick={() => openEditDialog(entry)}
-                    >
-                      <span className="sr-only">Edit</span>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{dialogMode === 'edit' ? 'Edit entry' : 'New entry'}</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-project">Project</Label>
-              <Select value={editForm.projectId} onValueChange={(value) => handleEditChange('projectId', value)}>
-                <SelectTrigger id="edit-project">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-task">Task</Label>
-              <Select
-                value={editForm.taskId}
-                onValueChange={(value) => handleEditChange('taskId', value)}
-                disabled={!editForm.projectId}
-              >
-                <SelectTrigger id="edit-task">
-                  <SelectValue placeholder="Select task" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No task</SelectItem>
-                  {entryTasks.map((task) => (
-                    <SelectItem key={task.id} value={task.id}>
-                      {task.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-description">Description</Label>
-              <Textarea
-                id="edit-description"
-                value={editForm.description}
-                onChange={(event) => handleEditChange('description', event.target.value)}
-                placeholder="Describe the work"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-entry-type">Entry type</Label>
-              <Select value={editForm.entryType} onValueChange={(value) => handleEditChange('entryType', value)}>
-                <SelectTrigger id="edit-entry-type">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="pomodoro">Pomodoro</SelectItem>
-                  <SelectItem value="non-billable">Non-billable</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-tags">Tags</Label>
-              <Input
-                id="edit-tags"
-                value={editForm.tags}
-                onChange={(event) => handleEditChange('tags', event.target.value)}
-                placeholder="frontend, meeting, review"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-start">Start time</Label>
-              <Input
-                id="edit-start"
-                type="datetime-local"
-                value={editForm.startTime}
-                onChange={(event) => handleEditChange('startTime', event.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="edit-end">End time</Label>
-              <Input
-                id="edit-end"
-                type="datetime-local"
-                value={editForm.endTime}
-                onChange={(event) => handleEditChange('endTime', event.target.value)}
-              />
-            </div>
-
-            {editError && <p className="text-sm text-destructive">{editError}</p>}
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit} disabled={isSaving || !editForm.projectId}>
-              {isSaving ? 'Saving...' : dialogMode === 'edit' ? 'Save' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TimesheetEntryDialog
+        open={editOpen}
+        dialogMode={dialogMode}
+        editForm={editForm}
+        editError={editError}
+        isSaving={isSaving || isDeleting}
+        projects={projects}
+        entryTasks={entryTasks}
+        onOpenChange={setEditOpen}
+        onChange={handleEditChange}
+        onSave={handleSaveEdit}
+        onCancel={() => setEditOpen(false)}
+      />
     </div>
   );
-};
-
-const getEntryDurationSeconds = (entry: TimeEntry) => {
-  if (entry.duration && entry.duration > 0) {
-    return entry.duration;
-  }
-  if (entry.endTime) {
-    return Math.max(0, differenceInSeconds(entry.endTime, entry.startTime));
-  }
-  return 0;
 };
 
 export default Timesheet;
