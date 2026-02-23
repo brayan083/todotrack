@@ -11,7 +11,7 @@ services/
 ├── task.service.ts       # Gestión de tareas
 ├── time.service.ts       # Temporizadores y registro de tiempo
 ├── project.service.ts    # Gestión de proyectos
-├── client.service.ts     # Gestión de clientes
+├── workspace.service.ts  # Gestión de workspaces
 └── index.ts             # Exportaciones centralizadas
 ```
 
@@ -146,12 +146,12 @@ await taskService.updateTask('taskId', {
 });
 
 // Actualizar solo el estado
-await taskService.updateTaskStatus('taskId', 'done');
+await taskService.updateTaskStatus('taskId', 'completed');
 
 // Agregar un comentario a una tarea
 await taskService.addComment('taskId', {
   userId: 'userId',
-  content: 'Este es un comentario',
+  text: 'Este es un comentario',
 });
 
 // Eliminar una tarea
@@ -167,19 +167,25 @@ import { db } from '@/lib/firebase.config';
 const timeService = TimeService.getInstance(db);
 
 // Iniciar un temporizador
-const entryId = await timeService.startTimer('userId', 'taskId');
+const entryId = await timeService.startTimer('userId', {
+  workspaceId: 'workspaceId',
+  projectId: 'projectId',
+  taskId: 'taskId',
+});
 console.log('Temporizador iniciado:', entryId);
 
 // Detener un temporizador
 await timeService.stopTimer(entryId);
 
 // Obtener todas las entradas de tiempo de un usuario
-const entries = await timeService.getTimerEntries('userId');
+const entries = await timeService.getTimerEntries('userId', 'workspaceId');
 console.log('Entradas de tiempo:', entries);
 
 // Crear una entrada de tiempo manual
 const manualEntryId = await timeService.createManualEntry({
+  workspaceId: 'workspaceId',
   userId: 'userId',
+  projectId: 'projectId',
   taskId: 'taskId',
   startTime: new Date('2024-01-15T09:00:00'),
   endTime: new Date('2024-01-15T17:00:00'),
@@ -191,47 +197,6 @@ await timeService.editTimeEntry(entryId, {
   startTime: new Date('2024-01-15T08:00:00'),
   endTime: new Date('2024-01-15T16:00:00'),
 });
-```
-
-### 5. ClientService
-
-```typescript
-import { ClientService } from '@/services';
-import { db } from '@/lib/firebase.config';
-
-const clientService = ClientService.getInstance(db);
-
-// Crear un nuevo cliente
-const clientId = await clientService.createClient({
-  name: 'Acme Corp',
-  contactEmail: 'contact@acme.com',
-  ownerId: 'userId',
-});
-
-// Obtener todos los clientes
-const clients = await clientService.getAllClients();
-
-// Obtener clientes en tiempo real (Observable)
-const subscription = clientService.getClientsByOwner('userId').subscribe({
-  next: (clients) => {
-    console.log('Clientes actualizados:', clients);
-  },
-  error: (error) => {
-    console.error('Error:', error);
-  }
-});
-
-// Actualizar un cliente
-await clientService.updateClient('clientId', {
-  name: 'Acme Corporation',
-  contactEmail: 'newcontact@acme.com',
-});
-
-// Eliminar un cliente
-await clientService.deleteClient('clientId');
-
-// Desuscribirse
-subscription.unsubscribe();
 ```
 
 ## Uso en Componentes de React
@@ -348,8 +313,7 @@ import {
   Comment, 
   Attachment,
   TimeEntry,
-  Project,
-  Client 
+  Project 
 } from '@/services';
 ```
 

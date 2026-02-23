@@ -63,29 +63,34 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Proyectos - Solo el creador puede leer/escribir
-    match /projects/{projectId} {
-      allow read, write: if isAuthenticated() && 
-        (resource.data.members == null || 
-         request.auth.uid in resource.data.members ||
-         resource.data.ownerId == request.auth.uid);
+    // Workspaces
+    match /workspaces/{workspaceId} {
+      allow read, write: if isAuthenticated();
     }
-    
-    // Tareas - Acceso basado en el proyecto
+
+    // Proyectos
+    match /projects/{projectId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Tareas
     match /tasks/{taskId} {
       allow read, write: if isAuthenticated();
     }
-    
-    // Time Entries - Solo el propietario
+
+    // Time Entries
     match /timeEntries/{entryId} {
-      allow read, write: if isAuthenticated() && 
-        request.auth.uid == resource.data.userId;
+      allow read, write: if isAuthenticated();
     }
-    
-    // Clientes - Solo el propietario
-    match /clients/{clientId} {
-      allow read, write: if isAuthenticated() && 
-        request.auth.uid == resource.data.ownerId;
+
+    // Activity Logs
+    match /activityLogs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Invitations
+    match /invitations/{inviteId} {
+      allow read, write: if isAuthenticated();
     }
   }
 }

@@ -24,16 +24,15 @@ import {
 
 export interface Project {
   id: string;
+  workspaceId: string;
   name: string;
   description?: string;
   color: string;
   members?: string[];
   ownerId: string;
-  clientId?: string;
-  clientName?: string;
   hourlyRate?: number | null;
-  estimatedTime?: string;
   isArchived: boolean;
+  visibility: 'public' | 'private';
   budget?: number | null;
   userRoles?: Record<string, ProjectRole>;
   createdAt: Date;
@@ -61,12 +60,29 @@ export class ProjectService extends BaseService {
    * Obtiene todos los proyectos de un usuario
    * @param userId - ID del usuario
    */
-  public async getAllProjects(userId: string): Promise<Project[]> {
+  public async getAllProjects(userId: string, workspaceId: string): Promise<Project[]> {
     try {
       const projectsRef = collection(this.db, this.collectionName);
       const queries = [
-        query(projectsRef, where('members', 'array-contains', userId)),
-        query(projectsRef, where('ownerId', '==', userId)),
+        query(
+          projectsRef,
+          where('members', 'array-contains', userId),
+          where('workspaceId', '==', workspaceId)
+        ),
+        query(
+          projectsRef,
+          where('ownerId', '==', userId),
+          where('workspaceId', '==', workspaceId)
+        ),
+        query(
+          projectsRef,
+          where('workspaceId', '==', workspaceId)
+        ),
+        query(
+          projectsRef,
+          where('visibility', '==', 'public'),
+          where('workspaceId', '==', workspaceId)
+        ),
       ];
 
       const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
@@ -77,16 +93,15 @@ export class ProjectService extends BaseService {
           const data = doc.data();
           projectMap.set(doc.id, {
             id: doc.id,
+            workspaceId: data.workspaceId,
             name: data.name,
             description: data.description || '',
             color: data.color,
             members: data.members || [],
             ownerId: data.ownerId,
-            clientId: data.clientId || undefined,
-            clientName: data.clientName || undefined,
             hourlyRate: data.hourlyRate ?? null,
-            estimatedTime: data.estimatedTime || '',
             isArchived: data.isArchived || false,
+            visibility: data.visibility || 'private',
             budget: data.budget ?? null,
             userRoles: data.userRoles,
             createdAt: data.createdAt?.toDate() || new Date(),
@@ -114,6 +129,7 @@ export class ProjectService extends BaseService {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         isArchived: data.isArchived || false,
+        visibility: data.visibility || 'private',
       };
       
       const docRef = await addDoc(projectsRef, projectData);
@@ -140,16 +156,15 @@ export class ProjectService extends BaseService {
       const data = snapshot.data();
       return {
         id: snapshot.id,
+        workspaceId: data.workspaceId,
         name: data.name,
         description: data.description || '',
         color: data.color,
         members: data.members || [],
         ownerId: data.ownerId,
-        clientId: data.clientId || undefined,
-        clientName: data.clientName || undefined,
         hourlyRate: data.hourlyRate ?? null,
-        estimatedTime: data.estimatedTime || '',
         isArchived: data.isArchived || false,
+        visibility: data.visibility || 'private',
         budget: data.budget ?? null,
         userRoles: data.userRoles,
         createdAt: data.createdAt?.toDate() || new Date(),
@@ -183,16 +198,15 @@ export class ProjectService extends BaseService {
         const data = snapshot.data();
         onNext({
           id: snapshot.id,
+          workspaceId: data.workspaceId,
           name: data.name,
           description: data.description || '',
           color: data.color,
           members: data.members || [],
           ownerId: data.ownerId,
-          clientId: data.clientId || undefined,
-          clientName: data.clientName || undefined,
           hourlyRate: data.hourlyRate ?? null,
-          estimatedTime: data.estimatedTime || '',
           isArchived: data.isArchived || false,
+          visibility: data.visibility || 'private',
           budget: data.budget ?? null,
           userRoles: data.userRoles,
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -227,15 +241,32 @@ export class ProjectService extends BaseService {
    * Obtiene los proyectos de un usuario como Observable
    * @param userId - ID del usuario
    */
-  public getProjectsByUser(userId: string): Observable<Project[]> {
+  public getProjectsByUser(userId: string, workspaceId: string): Observable<Project[]> {
     return new Observable((observer) => {
       const projectsRef = collection(this.db, this.collectionName);
       const queries = [
-        query(projectsRef, where('members', 'array-contains', userId)),
-        query(projectsRef, where('ownerId', '==', userId)),
+        query(
+          projectsRef,
+          where('members', 'array-contains', userId),
+          where('workspaceId', '==', workspaceId)
+        ),
+        query(
+          projectsRef,
+          where('ownerId', '==', userId),
+          where('workspaceId', '==', workspaceId)
+        ),
+        query(
+          projectsRef,
+          where('workspaceId', '==', workspaceId)
+        ),
+        query(
+          projectsRef,
+          where('visibility', '==', 'public'),
+          where('workspaceId', '==', workspaceId)
+        ),
       ];
 
-      const sources: Project[][] = [[], []];
+      const sources: Project[][] = Array.from({ length: queries.length }, () => []);
       const emit = () => {
         const projectMap = new Map<string, Project>();
         sources.flat().forEach((project) => {
@@ -253,16 +284,15 @@ export class ProjectService extends BaseService {
               const data = doc.data();
               projects.push({
                 id: doc.id,
+                workspaceId: data.workspaceId,
                 name: data.name,
                 description: data.description || '',
                 color: data.color,
                 members: data.members || [],
                 ownerId: data.ownerId,
-                clientId: data.clientId || undefined,
-                clientName: data.clientName || undefined,
                 hourlyRate: data.hourlyRate ?? null,
-                estimatedTime: data.estimatedTime || '',
                 isArchived: data.isArchived || false,
+                visibility: data.visibility || 'private',
                 budget: data.budget ?? null,
                 userRoles: data.userRoles,
                 createdAt: data.createdAt?.toDate() || new Date(),

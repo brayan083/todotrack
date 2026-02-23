@@ -30,7 +30,7 @@ const Dashboard: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Good morning, {greetingName}. You're on track for your weekly goals.
+            Good morning, {greetingName}. You&apos;re on track for your weekly goals.
           </p>
         </div>
       </div>

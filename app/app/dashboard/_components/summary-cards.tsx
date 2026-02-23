@@ -38,7 +38,7 @@ export const SummaryCards = ({
           <Timer className="h-16 w-16 text-primary" />
         </div>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Today's Hours</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Today&apos;s Hours</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (

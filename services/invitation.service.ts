@@ -23,7 +23,8 @@ export type InvitationStatus = 'pending' | 'accepted' | 'declined';
 
 export interface Invitation {
   id: string;
-  projectId: string;
+  workspaceId: string;
+  projectId?: string | null;
   email: string;
   invitedBy: string;
   role: InviteRole;
@@ -33,7 +34,8 @@ export interface Invitation {
 }
 
 export interface CreateInvitationInput {
-  projectId: string;
+  workspaceId: string;
+  projectId?: string | null;
   email: string;
   invitedBy: string;
   role: InviteRole;
@@ -46,6 +48,7 @@ export interface InvitationLookup {
 }
 
 interface InvitationDoc {
+  workspaceId?: string;
   projectId?: string;
   email?: string;
   invitedBy?: string;
@@ -82,7 +85,8 @@ export class InvitationService extends BaseService {
 
       const existingQuery = query(
         invitationsRef,
-        where('projectId', '==', data.projectId),
+        where('workspaceId', '==', data.workspaceId),
+        where('projectId', '==', data.projectId || null),
         where('email', '==', normalizedEmail),
         where('status', '==', 'pending')
       );
@@ -93,7 +97,8 @@ export class InvitationService extends BaseService {
       }
 
       const invitationData = {
-        projectId: data.projectId,
+        workspaceId: data.workspaceId,
+        projectId: data.projectId || null,
         email: normalizedEmail,
         invitedBy: data.invitedBy,
         role: normalizeInviteRole(data.role),
@@ -113,11 +118,12 @@ export class InvitationService extends BaseService {
   /**
    * Obtiene invitaciones de un proyecto
    */
-  public async getProjectInvitations(projectId: string): Promise<Invitation[]> {
+  public async getProjectInvitations(workspaceId: string, projectId: string): Promise<Invitation[]> {
     try {
       const invitationsRef = collection(this.db, this.collectionName);
       const invitationsQuery = query(
         invitationsRef,
+        where('workspaceId', '==', workspaceId),
         where('projectId', '==', projectId)
       );
 
@@ -126,7 +132,8 @@ export class InvitationService extends BaseService {
         const data = inviteDoc.data() as InvitationDoc;
         return {
           id: inviteDoc.id,
-          projectId: data.projectId || '',
+          workspaceId: data.workspaceId || '',
+          projectId: data.projectId || null,
           email: data.email || '',
           invitedBy: data.invitedBy || '',
           role: normalizeInviteRole(data.role),
@@ -141,6 +148,42 @@ export class InvitationService extends BaseService {
     } catch (error: any) {
       console.error('Error al obtener invitaciones:', error);
       throw new Error(`Error al obtener invitaciones: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtiene invitaciones de un workspace
+   */
+  public async getWorkspaceInvitations(workspaceId: string): Promise<Invitation[]> {
+    try {
+      const invitationsRef = collection(this.db, this.collectionName);
+      const invitationsQuery = query(
+        invitationsRef,
+        where('workspaceId', '==', workspaceId),
+        where('projectId', '==', null)
+      );
+
+      const snapshot = await getDocs(invitationsQuery);
+      const invitations = snapshot.docs.map((inviteDoc) => {
+        const data = inviteDoc.data() as InvitationDoc;
+        return {
+          id: inviteDoc.id,
+          workspaceId: data.workspaceId || '',
+          projectId: data.projectId || null,
+          email: data.email || '',
+          invitedBy: data.invitedBy || '',
+          role: normalizeInviteRole(data.role),
+          status: (data.status as InvitationStatus) || 'pending',
+          sentAt: data.sentAt?.toDate() || new Date(0),
+          inviteeId: data.inviteeId || undefined,
+        };
+      });
+
+      invitations.sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
+      return invitations;
+    } catch (error: any) {
+      console.error('Error al obtener invitaciones de workspace:', error);
+      throw new Error(`Error al obtener invitaciones de workspace: ${error.message}`);
     }
   }
 
@@ -169,7 +212,8 @@ export class InvitationService extends BaseService {
           const data = inviteDoc.data() as InvitationDoc;
           inviteMap.set(inviteDoc.id, {
             id: inviteDoc.id,
-            projectId: data.projectId || '',
+            workspaceId: data.workspaceId || '',
+            projectId: data.projectId || null,
             email: data.email || '',
             invitedBy: data.invitedBy || '',
             role: normalizeInviteRole(data.role),
@@ -225,7 +269,8 @@ export class InvitationService extends BaseService {
             const data = inviteDoc.data() as InvitationDoc;
             inviteMap.set(inviteDoc.id, {
               id: inviteDoc.id,
-              projectId: data.projectId || '',
+              workspaceId: data.workspaceId || '',
+              projectId: data.projectId || null,
               email: data.email || '',
               invitedBy: data.invitedBy || '',
               role: normalizeInviteRole(data.role),
@@ -281,11 +326,19 @@ export class InvitationService extends BaseService {
 
       const normalizedRole = normalizeProjectRole(inviteData.role, { allowOwner: false });
 
-      const projectRef = doc(this.db, 'projects', inviteData.projectId);
-      await updateDoc(projectRef, {
-        members: arrayUnion(userId),
-        [`userRoles.${userId}`]: normalizedRole,
-      });
+      if (inviteData.projectId) {
+        const projectRef = doc(this.db, 'projects', inviteData.projectId);
+        await updateDoc(projectRef, {
+          members: arrayUnion(userId),
+          [`userRoles.${userId}`]: normalizedRole,
+        });
+      } else if (inviteData.workspaceId) {
+        const workspaceRef = doc(this.db, 'workspaces', inviteData.workspaceId);
+        await updateDoc(workspaceRef, {
+          members: arrayUnion(userId),
+          [`userRoles.${userId}`]: normalizedRole,
+        });
+      }
 
       await updateDoc(inviteRef, {
         status: 'accepted',

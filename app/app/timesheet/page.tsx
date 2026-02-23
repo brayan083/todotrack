@@ -1,8 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAuth, useProjects, useTasks } from '@/hooks';
+import { useAuth, useProjects, useTasks, useWorkspace } from '@/hooks';
 import { TimeService, type TimeEntry } from '@/services/time.service';
-import { ClientService, type Client } from '@/services/client.service';
 import { UserService, type UserData } from '@/services/user.service';
 import { db } from '@/lib/firebase.config';
 import { TimesheetHeader } from './_components/timesheet-header';
@@ -23,6 +22,7 @@ import {
 
 const Timesheet: React.FC = () => {
   const { user } = useAuth();
+  const { workspaceId } = useWorkspace();
   const { projects } = useProjects();
   const { tasks } = useTasks();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
@@ -30,14 +30,12 @@ const Timesheet: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('all');
-  const [selectedClientId, setSelectedClientId] = useState('all');
   const [selectedUserId, setSelectedUserId] = useState('all');
   const [selectedTaskId, setSelectedTaskId] = useState('all');
   const [dateFrom, setDateFrom] = useState(() =>
     format(subDays(new Date(), 6), 'yyyy-MM-dd')
   );
   const [dateTo, setDateTo] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [clients, setClients] = useState<Client[]>([]);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [editOpen, setEditOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
@@ -94,7 +92,7 @@ const Timesheet: React.FC = () => {
   }, [selectedTaskId, selectedProjectId, tasks]);
 
   const loadEntries = useCallback(async () => {
-    if (!user) {
+    if (!user || !workspaceId) {
       setEntries([]);
       setLoading(false);
       setError(null);
@@ -105,14 +103,14 @@ const Timesheet: React.FC = () => {
     setError(null);
     try {
       const timeService = TimeService.getInstance(db);
-      const data = await timeService.getTimerEntries(user.uid);
+      const data = await timeService.getTimerEntries(user.uid, workspaceId);
       setEntries(data);
     } catch (loadError: any) {
       setError(loadError?.message || 'Error loading time entries');
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, workspaceId]);
 
   useEffect(() => {
     void loadEntries();
@@ -172,46 +170,6 @@ const Timesheet: React.FC = () => {
     loadUsers();
   }, [entries, usersById]);
 
-  useEffect(() => {
-    if (!user) {
-      setClients([]);
-      return;
-    }
-
-    const clientService = ClientService.getInstance(db);
-    const subscription = clientService.getClientsByOwner(user.uid).subscribe({
-      next: (clientList) => setClients(clientList),
-      error: (loadError) => {
-        console.error('Error loading clients:', loadError);
-      },
-    });
-
-    return () => subscription.unsubscribe();
-  }, [user]);
-
-  const clientOptions = useMemo(() => {
-    const options: { value: string; label: string }[] = [];
-    const seen = new Set<string>();
-
-    clients.forEach((client) => {
-      if (!seen.has(client.id)) {
-        options.push({ value: client.id, label: client.name });
-        seen.add(client.id);
-      }
-    });
-
-    projects.forEach((project) => {
-      if (project.clientName && !project.clientId) {
-        const value = `name:${project.clientName}`;
-        if (!seen.has(value)) {
-          options.push({ value, label: project.clientName });
-          seen.add(value);
-        }
-      }
-    });
-
-    return options;
-  }, [clients, projects]);
 
   const userOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
@@ -257,7 +215,6 @@ const Timesheet: React.FC = () => {
     entries,
     projects,
     selectedProjectId,
-    selectedClientId,
     selectedUserId,
     selectedTaskId,
     dateFrom: parsedDateFrom,
@@ -350,6 +307,11 @@ const Timesheet: React.FC = () => {
       return;
     }
 
+    if (!workspaceId) {
+      setEditError('Workspace is required.');
+      return;
+    }
+
     setEditError(null);
     if (!editForm.entryDate) {
       setEditError('Date is required.');
@@ -395,6 +357,7 @@ const Timesheet: React.FC = () => {
     try {
       const timeService = TimeService.getInstance(db);
       const payload = {
+        workspaceId,
         userId: user.uid,
         projectId: editForm.projectId,
         taskId: editForm.taskId === 'none' ? null : editForm.taskId,
@@ -433,6 +396,7 @@ const Timesheet: React.FC = () => {
         const newId = await timeService.createManualEntry(payload);
         const newEntry: TimeEntry = {
           id: newId,
+          workspaceId,
           userId: user.uid,
           projectId: editForm.projectId,
           taskId: editForm.taskId === 'none' ? null : editForm.taskId,
@@ -486,9 +450,6 @@ const Timesheet: React.FC = () => {
         dateTo={dateTo}
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
-        clientOptions={clientOptions}
-        selectedClientId={selectedClientId}
-        onClientChange={setSelectedClientId}
         userOptions={userOptions}
         selectedUserId={selectedUserId}
         onUserChange={setSelectedUserId}
@@ -499,7 +460,6 @@ const Timesheet: React.FC = () => {
           setDateFrom(format(subDays(new Date(), 6), 'yyyy-MM-dd'));
           setDateTo(format(new Date(), 'yyyy-MM-dd'));
           setSelectedProjectId('all');
-          setSelectedClientId('all');
           setSelectedUserId('all');
           setSelectedTaskId('all');
         }}

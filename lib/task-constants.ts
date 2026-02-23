@@ -1,7 +1,7 @@
 export const STATUS_LABELS: Record<string, string> = {
   "todo": "To Do",
   "in-progress": "In Progress",
-  "done": "Done",
+  "completed": "Completed",
 };
 
 export const PRIORITY_OPTIONS = ["low", "medium", "high", "urgent"] as const;
@@ -31,11 +31,11 @@ export const PROJECT_PRIORITY_STYLES: Record<string, string> = {
 export const PROJECT_STATUS_STYLES: Record<string, string> = {
   "todo": "bg-slate-100 text-slate-700",
   "in-progress": "bg-orange-100 text-orange-700",
-  "done": "bg-green-100 text-green-700",
+  "completed": "bg-green-100 text-green-700",
 };
 
 export const PROJECT_STATUS_ACCENTS: Record<string, string> = {
   "todo": "bg-slate-300",
   "in-progress": "bg-orange-400",
-  "done": "bg-green-500",
+  "completed": "bg-green-500",
 };

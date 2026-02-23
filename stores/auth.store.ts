@@ -7,7 +7,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from 'firebase/auth';
 import { AuthService } from '@/services';
+import { WorkspaceService } from '@/services/workspace.service';
 import { db, auth } from '@/lib/firebase.config';
+import { useWorkspaceStore } from './workspace.store';
 
 interface AuthState {
   user: User | null;
@@ -43,9 +45,42 @@ export const useAuthStore = create<AuthState>()(
        */
       initAuth: () => {
         set({ loading: true });
-        
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-          set({ user, loading: false });
+
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+          set({ user });
+
+          if (!user) {
+            useWorkspaceStore.getState().clearWorkspace();
+            set({ loading: false });
+            return;
+          }
+
+          try {
+            const workspaceStore = useWorkspaceStore.getState();
+            workspaceStore.setLoading(true);
+            const workspaceService = WorkspaceService.getInstance(db);
+            const personalWorkspace = await workspaceService.ensurePersonalWorkspace(
+              user.uid,
+              user.displayName || user.email || undefined
+            );
+            await workspaceStore.loadWorkspaces(user.uid);
+
+            const storedWorkspaceId =
+              typeof window !== 'undefined'
+                ? window.localStorage.getItem('activeWorkspaceId')
+                : null;
+            const availableWorkspaces = useWorkspaceStore.getState().workspaces;
+            const storedWorkspace = storedWorkspaceId
+              ? availableWorkspaces.find((item) => item.id === storedWorkspaceId) || null
+              : null;
+
+            workspaceStore.setWorkspace(storedWorkspace || personalWorkspace);
+          } catch (error) {
+            console.error('Error initializing workspace:', error);
+            useWorkspaceStore.getState().clearWorkspace();
+          } finally {
+            set({ loading: false });
+          }
         });
 
         // Retorna la función de limpieza

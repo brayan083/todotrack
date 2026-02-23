@@ -7,12 +7,11 @@ import { TagService, type Tag } from "@/services/tag.service";
 import { db } from "@/lib/firebase.config";
 import { PRIORITY_ORDER } from "@/lib/task-constants";
 import { useAuthStore } from "@/stores";
-import { useTimer } from "@/hooks";
+import { useTimer, useWorkspace } from "@/hooks";
 import {
   canCreateTasks,
   canDeleteTasks,
   canEditTasks,
-  canInviteMembers,
   canManageMembers,
   canManageProject,
   getUserRole,
@@ -58,22 +57,11 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
     assignees,
     usersMap,
     loading,
-    invitations,
-    inviteMode,
-    inviteValue,
-    inviteRole,
-    inviteLoading,
-    inviteError,
     memberActionError,
     memberActionLoadingId,
-    setInviteMode,
-    setInviteValue,
-    setInviteRole,
-    handleSendInvite,
-    handleRevokeInvite,
     handleUpdateMemberRole,
-    handleRemoveMember,
   } = useProjectTasksPageData({ projectId: resolvedParams.id, user });
+  const { workspace } = useWorkspace();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilters, setStatusFilters] = useState<string[]>(["todo", "in-progress"]);
@@ -126,7 +114,7 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
   }, [filteredTasks, sortBy, sortDirection]);
 
   useEffect(() => {
-    setVisibleTaskCount(TASKS_PAGE_SIZE);
+    queueMicrotask(() => setVisibleTaskCount(TASKS_PAGE_SIZE));
   }, [searchTerm, statusFilters, priorityFilters, assigneeFilters, tagFilters, dueDateFrom, dueDateTo, sortBy, sortDirection]);
 
   useEffect(() => {
@@ -159,11 +147,13 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
       const taskId = pathParts[taskIndex + 1];
       const task = tasks.find((item) => item.id === taskId);
       if (task) {
-        setSelectedTask(task);
-        setEditData(task);
+        queueMicrotask(() => {
+          setSelectedTask(task);
+          setEditData(task);
+        });
       }
     } else {
-      setSelectedTask(null);
+      queueMicrotask(() => setSelectedTask(null));
     }
   }, [tasks]);
 
@@ -177,11 +167,13 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
         const taskId = pathParts[taskIndex + 1];
         const task = tasks.find((item) => item.id === taskId);
         if (task) {
-          setSelectedTask(task);
-          setEditData(task);
+          queueMicrotask(() => {
+            setSelectedTask(task);
+            setEditData(task);
+          });
         }
       } else {
-        setSelectedTask(null);
+        queueMicrotask(() => setSelectedTask(null));
       }
     };
 
@@ -269,20 +261,15 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
   const isTaskActive = (taskId: string) =>
     Boolean(isRunning && activeEntry?.taskId && activeEntry.taskId === taskId);
 
-  const currentUserRole = useMemo(() => getUserRole(project, user?.uid), [project, user]);
-
-  const canInvite = useMemo(() => canInviteMembers(currentUserRole), [currentUserRole]);
-  const canManageMembersActions = useMemo(
-    () => canManageMembers(currentUserRole),
-    [currentUserRole]
+  const currentUserRole = useMemo(
+    () => getUserRole(project, user?.uid, workspace?.members),
+    [project, user, workspace?.members]
   );
-  const canManageProjectActions = useMemo(
-    () => canManageProject(currentUserRole),
-    [currentUserRole]
-  );
-  const canCreateTaskActions = useMemo(() => canCreateTasks(currentUserRole), [currentUserRole]);
-  const canEditTaskActions = useMemo(() => canEditTasks(currentUserRole), [currentUserRole]);
-  const canDeleteTaskActions = useMemo(() => canDeleteTasks(currentUserRole), [currentUserRole]);
+  const canManageMembersActions = canManageMembers(currentUserRole);
+  const canManageProjectActions = canManageProject(currentUserRole);
+  const canCreateTaskActions = canCreateTasks(currentUserRole);
+  const canEditTaskActions = canEditTasks(currentUserRole);
+  const canDeleteTaskActions = canDeleteTasks(currentUserRole);
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -295,7 +282,7 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
       status: editData.status ?? selectedTask.status,
       priority: editData.priority ?? selectedTask.priority,
       dueDate: editData.dueDate ?? selectedTask.dueDate,
-      assigneeIds: editData.assigneeIds ?? selectedTask.assigneeIds ?? [],
+      assigneeId: editData.assigneeId ?? selectedTask.assigneeId ?? "",
       tagIds: editData.tagIds ?? selectedTask.tagIds ?? [],
     };
 
@@ -307,7 +294,7 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
       status: payload.status || "todo",
       priority: payload.priority || "medium",
       dueDate: normalizeDate(payload.dueDate),
-      assigneeIds: payload.assigneeIds,
+      assigneeId: payload.assigneeId,
       tagIds: payload.tagIds,
     });
 
@@ -317,7 +304,7 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
       status: selectedTask.status || "todo",
       priority: selectedTask.priority || "medium",
       dueDate: normalizeDate(selectedTask.dueDate),
-      assigneeIds: selectedTask.assigneeIds || [],
+      assigneeId: selectedTask.assigneeId || "",
       tagIds: selectedTask.tagIds || [],
     });
 
@@ -345,11 +332,8 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
           updates.dueDate = payload.dueDate ? new Date(payload.dueDate) : undefined;
         }
 
-        const selectedAssigneeIds = selectedTask.assigneeIds || [];
-        const payloadAssigneeIds = payload.assigneeIds || [];
-        if (JSON.stringify(payloadAssigneeIds) !== JSON.stringify(selectedAssigneeIds)) {
-          updates.assigneeIds = payloadAssigneeIds;
-          updates.assigneeId = payloadAssigneeIds[0] || "";
+        if (payload.assigneeId !== selectedTask.assigneeId) {
+          updates.assigneeId = payload.assigneeId || "";
         }
 
         const selectedTagIds = selectedTask.tagIds || [];
@@ -377,11 +361,6 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
     };
   }, [editData, selectedTask, canEditTaskActions, setTasks]);
 
-  const pendingInvites = useMemo(
-    () => invitations.filter((invite) => invite.status === "pending"),
-    [invitations]
-  );
-
   const toggleFilterValue = (
     value: string,
     setter: React.Dispatch<React.SetStateAction<string[]>>
@@ -408,7 +387,7 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
     tasks.forEach((task) => {
       if (task.status === "todo") stats.todo++;
       else if (task.status === "in-progress") stats.inProgress++;
-      else if (task.status === "done") stats.done++;
+      else if (task.status === "completed") stats.done++;
     });
     return stats;
   }, [tasks]);
@@ -537,31 +516,17 @@ const ProjectTasksPage: React.FC<ProjectTasksPageProps> = ({ params }) => {
               }
             />
 
-            {project.members && project.members.length > 0 ? (
-              <ProjectMembersCard
-                project={project}
-                usersMap={usersMap}
-                currentUserRole={currentUserRole}
-                currentUser={user}
-                canInvite={canInvite}
-                canManageMembersActions={canManageMembersActions}
-                inviteMode={inviteMode}
-                inviteValue={inviteValue}
-                inviteRole={inviteRole}
-                inviteLoading={inviteLoading}
-                inviteError={inviteError}
-                pendingInvites={pendingInvites}
-                memberActionError={memberActionError}
-                memberActionLoadingId={memberActionLoadingId}
-                onInviteModeChange={setInviteMode}
-                onInviteValueChange={setInviteValue}
-                onInviteRoleChange={setInviteRole}
-                onSendInvite={handleSendInvite}
-                onRevokeInvite={handleRevokeInvite}
-                onUpdateMemberRole={handleUpdateMemberRole}
-                onRemoveMember={handleRemoveMember}
-              />
-            ) : null}
+            <ProjectMembersCard
+              project={project}
+              usersMap={usersMap}
+              currentUserRole={currentUserRole}
+              currentUser={user}
+              canManageMembersActions={canManageMembersActions}
+              memberActionError={memberActionError}
+              memberActionLoadingId={memberActionLoadingId}
+              onUpdateMemberRole={handleUpdateMemberRole}
+              workspaceMembers={workspace?.members || []}
+            />
 
             <ProjectTaskStatsCard taskStats={taskStats} />
           </div>

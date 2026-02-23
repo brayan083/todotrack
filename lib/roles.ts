@@ -41,14 +41,21 @@ export function normalizeInviteRole(role: string | undefined): InviteRole {
   return "member";
 }
 
-export function getUserRole(project: Project | null, userId?: string): ProjectRole | null {
+export function getUserRole(
+  project: Project | null,
+  userId?: string,
+  workspaceMembers?: string[]
+): ProjectRole | null {
   if (!project || !userId) return null;
 
   if (project.ownerId === userId) {
     return "owner";
   }
 
-  if (!project.members?.includes(userId)) {
+  const isProjectMember = project.members?.includes(userId) ?? false;
+  const isWorkspaceMember = workspaceMembers?.includes(userId) ?? false;
+
+  if (!isProjectMember && !isWorkspaceMember) {
     return null;
   }
 

@@ -12,7 +12,7 @@ interface TaskState {
   tasks: Task[];
   filteredTasks: Task[];
   selectedTask: Task | null;
-  filterStatus: string | null;
+  filterStatus: Task["status"] | null;
   filterProjectId: string | null;
   loading: boolean;
   error: string | null;
@@ -20,19 +20,19 @@ interface TaskState {
   // Actions
   setTasks: (tasks: Task[]) => void;
   setSelectedTask: (task: Task | null) => void;
-  setFilterStatus: (status: string | null) => void;
+  setFilterStatus: (status: Task["status"] | null) => void;
   setFilterProjectId: (projectId: string | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  loadTasks: (userId: string, projectId?: string) => Promise<void>;
+  loadTasks: (userId: string, workspaceId: string, projectId?: string) => Promise<void>;
   createTask: (data: Omit<Task, 'id' | 'createdAt'>) => Promise<string>;
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>;
-  updateTaskStatus: (taskId: string, status: string) => Promise<void>;
+  updateTaskStatus: (taskId: string, status: Task["status"]) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   applyFilters: () => void;
   getTaskById: (taskId: string) => Task | undefined;
   getTasksByProject: (projectId: string) => Task[];
-  getTasksByStatus: (status: string) => Task[];
+  getTasksByStatus: (status: Task["status"]) => Task[];
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
@@ -68,11 +68,11 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   /**
    * Carga las tareas del usuario
    */
-  loadTasks: async (userId: string, projectId?: string) => {
+  loadTasks: async (userId: string, workspaceId: string, projectId?: string) => {
     try {
       set({ loading: true, error: null });
       const taskService = TaskService.getInstance(db);
-      const tasks = await taskService.getAllTasks(userId, projectId);
+      const tasks = await taskService.getAllTasks(userId, workspaceId, projectId);
       set({ tasks, loading: false });
       get().applyFilters();
     } catch (error: any) {
@@ -98,6 +98,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (user) {
         const activityService = ActivityLogService.getInstance(db);
         await activityService.logTaskCreated(
+          data.workspaceId,
           data.projectId,
           user.uid,
           user.displayName || user.email || 'Usuario',
@@ -153,19 +154,20 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   /**
    * Actualiza el estado de una tarea
    */
-  updateTaskStatus: async (taskId: string, status: string) => {
+  updateTaskStatus: async (taskId: string, status: Task["status"]) => {
     try {
       set({ loading: true, error: null });
       const taskService = TaskService.getInstance(db);
       await taskService.updateTaskStatus(taskId, status);
       
       // Registrar actividad si se completa
-      if (status === 'done') {
+      if (status === 'completed') {
         const user = useAuthStore.getState().user;
         const task = get().tasks.find(t => t.id === taskId);
         if (user && task) {
           const activityService = ActivityLogService.getInstance(db);
           await activityService.logTaskCompleted(
+            task.workspaceId,
             task.projectId,
             user.uid,
             user.displayName || user.email || 'Usuario',

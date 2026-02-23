@@ -9,7 +9,7 @@ import {
   Play,
   Square,
   Trash2,
-  User2,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -83,11 +82,11 @@ export const ProjectTaskCard: React.FC<ProjectTaskCardProps> = ({
   onResume,
   onStop,
 }) => {
-  const isDone = task.status === "done";
+  const isDone = task.status === "completed";
   const statusAccent = PROJECT_STATUS_ACCENTS[task.status] || PROJECT_STATUS_ACCENTS.todo;
   const statusStyle = PROJECT_STATUS_STYLES[task.status] || PROJECT_STATUS_STYLES.todo;
   const priorityStyle = PROJECT_PRIORITY_STYLES[task.priority] || PROJECT_PRIORITY_STYLES.medium;
-  const assigneeIds = task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []);
+  const assigneeId = task.assigneeId || "";
   const selectedLabels = assignedUsers
     .map((user) => user.displayName || user.email || "User")
     .filter(Boolean);
@@ -320,7 +319,9 @@ export const ProjectTaskCard: React.FC<ProjectTaskCardProps> = ({
                     <DropdownMenuLabel>Status</DropdownMenuLabel>
                     <DropdownMenuRadioGroup
                       value={task.status}
-                      onValueChange={(value) => onInlineUpdate(task.id, { status: value })}
+                      onValueChange={(value) =>
+                        onInlineUpdate(task.id, { status: value as Task["status"] })
+                      }
                     >
                       <DropdownMenuRadioItem data-inline-edit="true" value="todo">
                         To Do
@@ -328,8 +329,8 @@ export const ProjectTaskCard: React.FC<ProjectTaskCardProps> = ({
                       <DropdownMenuRadioItem data-inline-edit="true" value="in-progress">
                         In Progress
                       </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem data-inline-edit="true" value="done">
-                        Done
+                      <DropdownMenuRadioItem data-inline-edit="true" value="completed">
+                        Completed
                       </DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
                   </DropdownMenuContent>
@@ -352,7 +353,7 @@ export const ProjectTaskCard: React.FC<ProjectTaskCardProps> = ({
                       className="flex items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <User2 className="h-4 w-4" />
+                      <User className="h-4 w-4" />
                       {selectedLabels.length > 0 ? (
                         <span>
                           Assignees: {selectedLabels.slice(0, 2).join(", ")}
@@ -365,39 +366,32 @@ export const ProjectTaskCard: React.FC<ProjectTaskCardProps> = ({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" data-inline-edit="true">
                     <DropdownMenuLabel>Assignees</DropdownMenuLabel>
-                    {assignees.map((assignee) => (
-                      <DropdownMenuCheckboxItem
-                        key={assignee.uid}
-                        data-inline-edit="true"
-                        checked={assigneeIds.includes(assignee.uid)}
-                        onCheckedChange={() => {
-                          const nextIds = assigneeIds.includes(assignee.uid)
-                            ? assigneeIds.filter((id) => id !== assignee.uid)
-                            : [...assigneeIds, assignee.uid];
-                          onInlineUpdate(task.id, {
-                            assigneeIds: nextIds,
-                            assigneeId: nextIds[0] || "",
-                          });
-                        }}
-                      >
-                        {assignee.label}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      data-inline-edit="true"
-                      onSelect={(event) => {
-                        event.preventDefault();
-                        onInlineUpdate(task.id, { assigneeIds: [], assigneeId: "" });
-                      }}
+                    <DropdownMenuRadioGroup
+                      value={assigneeId || "unassigned"}
+                      onValueChange={(value) =>
+                        onInlineUpdate(task.id, {
+                          assigneeId: value === "unassigned" ? "" : value,
+                        })
+                      }
                     >
-                      Clear selection
-                    </DropdownMenuItem>
+                      <DropdownMenuRadioItem data-inline-edit="true" value="unassigned">
+                        Unassigned
+                      </DropdownMenuRadioItem>
+                      {assignees.map((assignee) => (
+                        <DropdownMenuRadioItem
+                          key={assignee.uid}
+                          data-inline-edit="true"
+                          value={assignee.uid}
+                        >
+                          {assignee.label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
                 <div className="flex items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-                  <User2 className="h-4 w-4" />
+                  <User className="h-4 w-4" />
                   {selectedLabels.length > 0 ? (
                     <span>
                       Assignees: {selectedLabels.slice(0, 2).join(", ")}

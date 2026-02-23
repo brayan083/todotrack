@@ -8,13 +8,12 @@ import {
   startOfDay,
   startOfWeek,
 } from 'date-fns';
-import { useAuth, useProjects, useTasks, useTimer } from '@/hooks';
+import { useAuth, useProjects, useTasks, useTimer, useWorkspace } from '@/hooks';
 import { type Project, TimeEntry, TimeService } from '@/services';
 import { db } from '@/lib/firebase.config';
 import {
   WEEK_STARTS_ON,
   WEEKLY_GOAL_HOURS,
-  parseEstimatedHours,
 } from '../_utils/dashboard-utils';
 
 export type ProductivityPoint = { name: string; value: number };
@@ -28,24 +27,32 @@ export type RecentEntry = TimeEntry & { duration: number };
 
 export const useDashboardData = () => {
   const { user } = useAuth();
+  const { workspaceId } = useWorkspace();
   const { projects, loading: projectsLoading } = useProjects();
   const { getTaskById, loading: tasksLoading } = useTasks();
   const { activeEntry, elapsedSeconds } = useTimer();
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
-  const isLoading = loadingEntries || projectsLoading || tasksLoading;
+  const effectiveTimeEntries = useMemo(
+    () => (user && workspaceId ? timeEntries : []),
+    [user, workspaceId, timeEntries]
+  );
+  const effectiveLoadingEntries = useMemo(
+    () => (user && workspaceId ? loadingEntries : false),
+    [user, workspaceId, loadingEntries]
+  );
+  const isLoading = effectiveLoadingEntries || projectsLoading || tasksLoading;
 
   useEffect(() => {
-    if (!user) {
-      setTimeEntries([]);
+    if (!user || !workspaceId) {
       return;
     }
 
     let isMounted = true;
-    setLoadingEntries(true);
+    queueMicrotask(() => setLoadingEntries(true));
     const service = TimeService.getInstance(db);
     service
-      .getTimerEntries(user.uid)
+      .getTimerEntries(user.uid, workspaceId)
       .then((entries) => {
         if (isMounted) {
           setTimeEntries(entries);
@@ -60,16 +67,16 @@ export const useDashboardData = () => {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, workspaceId]);
 
   const mergedEntries = useMemo(() => {
     const byId = new Map<string, TimeEntry>();
-    timeEntries.forEach((entry) => byId.set(entry.id, entry));
+    effectiveTimeEntries.forEach((entry) => byId.set(entry.id, entry));
     if (activeEntry) {
       byId.set(activeEntry.id, { ...activeEntry, duration: elapsedSeconds });
     }
     return Array.from(byId.values());
-  }, [timeEntries, activeEntry, elapsedSeconds]);
+  }, [effectiveTimeEntries, activeEntry, elapsedSeconds]);
 
   const entriesWithDuration = useMemo(() => {
     return mergedEntries.map((entry) => {
@@ -89,7 +96,7 @@ export const useDashboardData = () => {
     });
   }, [mergedEntries, activeEntry, elapsedSeconds]);
 
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const todayRange = useMemo(() => {
     const start = startOfDay(now);
     return { start, end: endOfDay(now) };
@@ -161,11 +168,8 @@ export const useDashboardData = () => {
       .filter((project) => !project.isArchived)
       .map((project) => {
         const totalSeconds = totalsByProject.get(project.id) || 0;
-        const estimatedHours = parseEstimatedHours(project.estimatedTime);
-        const estimatedSeconds = estimatedHours ? estimatedHours * 3600 : null;
-        const progress = estimatedSeconds
-          ? Math.min(100, Math.round((totalSeconds / estimatedSeconds) * 100))
-          : 100;
+        const estimatedSeconds = null;
+        const progress = 100;
 
         return {
           project,

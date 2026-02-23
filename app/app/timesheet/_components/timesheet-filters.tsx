@@ -16,9 +16,6 @@ type TimesheetFiltersProps = {
   dateTo: string;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
-  clientOptions: FilterOption[];
-  selectedClientId: string;
-  onClientChange: (value: string) => void;
   userOptions: FilterOption[];
   selectedUserId: string;
   onUserChange: (value: string) => void;
@@ -36,9 +33,6 @@ export const TimesheetFilters = ({
   dateTo,
   onDateFromChange,
   onDateToChange,
-  clientOptions,
-  selectedClientId,
-  onClientChange,
   userOptions,
   selectedUserId,
   onUserChange,
@@ -49,7 +43,7 @@ export const TimesheetFilters = ({
 }: TimesheetFiltersProps) => {
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <div className="grid gap-2">
           <Label>Project</Label>
           <Select value={selectedProjectId} onValueChange={onProjectChange}>
@@ -83,22 +77,6 @@ export const TimesheetFilters = ({
             value={dateTo}
             onChange={(event) => onDateToChange(event.target.value)}
           />
-        </div>
-        <div className="grid gap-2">
-          <Label>Client</Label>
-          <Select value={selectedClientId} onValueChange={onClientChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="All clients" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All clients</SelectItem>
-              {clientOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
         <div className="grid gap-2">
           <Label>Assigned user</Label>

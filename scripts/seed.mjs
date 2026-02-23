@@ -92,7 +92,7 @@ const addMinutes = (date, minutes) => {
   return result;
 };
 
-const MAIN_USER_UID = '050cn3X1vSaAsdh8NU8NowqgGx82';
+const MAIN_USER_UID = process.env.SEED_USER_UID || 'ZQYXKF3EhZPBwAiba4Io8muhX5A2';
 
 async function deleteCollection(name) {
   const snapshot = await getDocs(collection(db, name));
@@ -112,21 +112,32 @@ async function deleteCollection(name) {
   await batch.commit();
 }
 
-const clientNames = [
-  'TechFlow Solutions',
-  'Digital Architects',
-  'CloudSync Systems',
-  'Nexus Development',
-  'Innovate Labs',
+const workspaceSeeds = [
+  {
+    name: 'Main Workspace',
+    description: 'Workspace principal del entorno de prueba',
+  },
+  {
+    name: 'Product Studio',
+    description: 'Workspace para equipos de producto y diseno',
+  },
+  {
+    name: 'Ops Lab',
+    description: 'Workspace de operaciones y mantenimiento',
+  },
 ];
 
-const clients = clientNames.map((name, index) => ({
+const workspaces = workspaceSeeds.map((seed, index) => ({
   id: randomUUID(),
-  name,
-  contactEmail: `contact@${name.toLowerCase().replace(/\s+/g, '')}.com`,
+  name: seed.name,
+  description: seed.description,
   ownerId: MAIN_USER_UID,
-  createdAt: Timestamp.fromDate(addDays(new Date(), -randomInt(60, 180))),
-  updatedAt: Timestamp.fromDate(addDays(new Date(), -randomInt(1, 30))),
+  members: [MAIN_USER_UID],
+  userRoles: {
+    [MAIN_USER_UID]: 'owner',
+  },
+  settings: {},
+  createdAt: Timestamp.fromDate(addDays(new Date(), -randomInt(60 + index * 10, 180 + index * 10))),
 }));
 
 const projectNames = [
@@ -142,27 +153,31 @@ const projectNames = [
 
 const projectColors = ['#3B82F6', '#F97316', '#10B981', '#8B5CF6', '#F43F5E'];
 
-const projects = projectNames.map((name, index) => {
-  const client = randomItem(clients);
-  return {
-    id: randomUUID(),
-    name,
-    description: `Sistema completo para ${name.toLowerCase()}. Incluye diseño, desarrollo, testing y deployment.`,
-    color: projectColors[index % projectColors.length],
-    clientId: client.id,
-    clientName: client.name,
-    hourlyRate: randomInt(50, 150),
-    budget: randomInt(5000, 50000),
-    estimatedTime: `${randomInt(80, 400)}h`,
-    isArchived: false,
-    ownerId: MAIN_USER_UID,
-    members: [MAIN_USER_UID],
-    userRoles: {
-      [MAIN_USER_UID]: 'owner',
-    },
-    createdAt: Timestamp.fromDate(addDays(new Date(), -randomInt(20, 120))),
-    updatedAt: Timestamp.fromDate(addDays(new Date(), -randomInt(1, 15))),
-  };
+const projects = workspaces.flatMap((currentWorkspace, workspaceIndex) => {
+  const count = randomInt(3, projectNames.length - 2);
+  const shuffled = [...projectNames].sort(() => Math.random() - 0.5).slice(0, count);
+
+  return shuffled.map((name, index) => {
+    const createdAt = addDays(new Date(), -randomInt(20, 120));
+    return {
+      id: randomUUID(),
+      workspaceId: currentWorkspace.id,
+      name,
+      description: `Sistema completo para ${name.toLowerCase()}. Incluye diseno, desarrollo, testing y deployment.`,
+      color: projectColors[(index + workspaceIndex) % projectColors.length],
+      hourlyRate: randomInt(50, 150),
+      budget: randomInt(5000, 50000),
+      isArchived: false,
+      visibility: Math.random() > 0.7 ? 'public' : 'private',
+      ownerId: MAIN_USER_UID,
+      members: [MAIN_USER_UID],
+      userRoles: {
+        [MAIN_USER_UID]: 'owner',
+      },
+      createdAt: Timestamp.fromDate(createdAt),
+      updatedAt: Timestamp.fromDate(addDays(createdAt, randomInt(1, 15))),
+    };
+  });
 });
 
 const taskTitles = [
@@ -188,26 +203,32 @@ const taskTitles = [
   'Setup environment variables',
 ];
 
-const taskStatuses = ['todo', 'done'];
+const taskStatuses = ['todo', 'in-progress', 'completed'];
 const priorities = ['low', 'medium', 'high'];
 
-const tasks = Array.from({ length: 40 }, (_, index) => {
-  const project = randomItem(projects);
-  const createdAt = addDays(new Date(), -randomInt(1, 60));
-  const daysUntilDue = randomInt(5, 30);
-  return {
-    id: randomUUID(),
-    projectId: project.id,
-    title: randomItem(taskTitles),
-    description: `Tarea dentro del proyecto ${project.name}`,
-    status: Math.random() > 0.4 ? 'done' : 'todo',
-    assigneeId: MAIN_USER_UID,
-    position: index,
-    dueDate: Timestamp.fromDate(addDays(createdAt, daysUntilDue)),
-    priority: randomItem(priorities),
-    attachments: [],
-    createdAt: Timestamp.fromDate(createdAt),
-  };
+const tasks = projects.flatMap((project) => {
+  const taskCount = randomInt(5, 12);
+  return Array.from({ length: taskCount }, (_, index) => {
+    const createdAt = addDays(new Date(), -randomInt(1, 60));
+    const daysUntilDue = randomInt(5, 30);
+    return {
+      id: randomUUID(),
+      workspaceId: project.workspaceId,
+      projectId: project.id,
+      title: randomItem(taskTitles),
+      description: `Tarea dentro del proyecto ${project.name}`,
+      status: randomItem(taskStatuses),
+      assigneeId: MAIN_USER_UID,
+      position: index,
+      dueDate: Timestamp.fromDate(addDays(createdAt, daysUntilDue)),
+      priority: randomItem(priorities),
+      subtasks: [],
+      attachments: [],
+      isDeleted: false,
+      deletedAt: null,
+      createdAt: Timestamp.fromDate(createdAt),
+    };
+  });
 });
 
 const activityDescriptions = [
@@ -227,7 +248,7 @@ const activityDescriptions = [
   'Integrando servicios terceros',
 ];
 
-const timeEntries = Array.from({ length: 60 }, (_, index) => {
+const timeEntries = Array.from({ length: projects.length * 6 }, () => {
   const project = randomItem(projects);
   const projectTasks = tasks.filter((task) => task.projectId === project.id);
   const task = projectTasks.length && Math.random() > 0.3 ? randomItem(projectTasks) : null;
@@ -241,6 +262,7 @@ const timeEntries = Array.from({ length: 60 }, (_, index) => {
 
   return {
     id: randomUUID(),
+    workspaceId: project.workspaceId,
     userId: MAIN_USER_UID,
     projectId: project.id,
     taskId: task ? task.id : null,
@@ -256,20 +278,22 @@ const timeEntries = Array.from({ length: 60 }, (_, index) => {
   };
 });
 
-const activityLogs = Array.from({ length: 25 }, (_, index) => {
+const activityLogs = Array.from({ length: projects.length * 3 }, () => {
   const project = randomItem(projects);
-  const task = randomItem(tasks.filter((t) => t.projectId === project.id));
-  const actions = ['created_task', 'completed_task', 'logged_time', 'updated_task'];
+  const projectTasks = tasks.filter((t) => t.projectId === project.id);
+  const task = projectTasks.length ? randomItem(projectTasks) : null;
+  const actions = ['task_created', 'task_completed', 'time_logged', 'task_updated'];
   const action = randomItem(actions);
 
   return {
     id: randomUUID(),
+    workspaceId: project.workspaceId,
     projectId: project.id,
     userId: MAIN_USER_UID,
     userDisplayName: 'Tu usuario',
     action,
-    targetId: task.id,
-    targetName: task.title,
+    targetId: task?.id || '',
+    targetName: task?.title || 'Tarea',
     timestamp: Timestamp.fromDate(addDays(new Date(), -randomInt(1, 7))),
   };
 });
@@ -302,10 +326,10 @@ async function run() {
   await deleteCollection('timeEntries');
   await deleteCollection('tasks');
   await deleteCollection('projects');
-  await deleteCollection('clients');
+  await deleteCollection('workspaces');
 
-  console.log('📝 Insertando clientes...');
-  await seedCollection('clients', clients);
+  console.log('🏢 Insertando workspaces...');
+  await seedCollection('workspaces', workspaces);
 
   console.log('📦 Insertando proyectos...');
   await seedCollection('projects', projects);
@@ -320,7 +344,7 @@ async function run() {
   await seedCollection('activityLogs', activityLogs);
 
   console.log('\n✨ Seed completado exitosamente!');
-  console.log(`- ${clients.length} clientes`);
+  console.log(`- ${workspaces.length} workspaces`);
   console.log(`- ${projects.length} proyectos`);
   console.log(`- ${tasks.length} tareas`);
   console.log(`- ${timeEntries.length} registros de tiempo`);

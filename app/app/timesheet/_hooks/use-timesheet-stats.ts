@@ -19,7 +19,6 @@ type UseTimesheetStatsArgs = {
   entries: TimeEntry[];
   projects: Project[];
   selectedProjectId: string;
-  selectedClientId: string;
   selectedUserId: string;
   selectedTaskId: string;
   dateFrom?: Date | null;
@@ -33,7 +32,6 @@ export const useTimesheetStats = ({
   entries,
   projects,
   selectedProjectId,
-  selectedClientId,
   selectedUserId,
   selectedTaskId,
   dateFrom,
@@ -49,10 +47,6 @@ export const useTimesheetStats = ({
       start: rangeStart,
       end: rangeEnd,
     };
-    const normalizedClientName = selectedClientId.startsWith("name:")
-      ? selectedClientId.replace("name:", "")
-      : "";
-
     const matchesFilters = (entry: TimeEntry) => {
       if (selectedProjectId !== "all" && entry.projectId !== selectedProjectId) {
         return false;
@@ -65,26 +59,13 @@ export const useTimesheetStats = ({
           return false;
         }
       }
-      if (selectedClientId !== "all") {
-        const project = projectLookup.get(entry.projectId);
-        if (!project) {
-          return false;
-        }
-        if (normalizedClientName) {
-          if (project.clientName !== normalizedClientName) {
-            return false;
-          }
-        } else if (project.clientId !== selectedClientId) {
-          return false;
-        }
-      }
       return isWithinInterval(entry.startTime, range);
     };
 
     return entries
       .filter(matchesFilters)
       .sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
-  }, [entries, selectedProjectId, selectedClientId, selectedUserId, selectedTaskId, dateFrom, dateTo, weekStart, weekEnd, projectLookup]);
+  }, [entries, selectedProjectId, selectedUserId, selectedTaskId, dateFrom, dateTo, weekStart, weekEnd]);
 
   const previousPeriodTotals = useMemo(() => {
     const currentStart = dateFrom ? startOfDay(dateFrom) : startOfDay(weekStart);
@@ -93,10 +74,6 @@ export const useTimesheetStats = ({
     const prevStart = addDays(currentStart, -rangeLength);
     const prevEnd = addDays(currentEnd, -rangeLength);
     const range = { start: startOfDay(prevStart), end: endOfDay(prevEnd) };
-    const normalizedClientName = selectedClientId.startsWith("name:")
-      ? selectedClientId.replace("name:", "")
-      : "";
-
     return entries
       .filter((entry) => {
         if (selectedProjectId !== "all" && entry.projectId !== selectedProjectId) {
@@ -110,33 +87,20 @@ export const useTimesheetStats = ({
             return false;
           }
         }
-        if (selectedClientId !== "all") {
-          const project = projectLookup.get(entry.projectId);
-          if (!project) {
-            return false;
-          }
-          if (normalizedClientName) {
-            if (project.clientName !== normalizedClientName) {
-              return false;
-            }
-          } else if (project.clientId !== selectedClientId) {
-            return false;
-          }
-        }
         return isWithinInterval(entry.startTime, range);
       })
       .reduce((total, entry) => total + getEntryDurationSeconds(entry), 0);
-  }, [entries, selectedProjectId, selectedClientId, selectedUserId, selectedTaskId, dateFrom, dateTo, weekStart, weekEnd, projectLookup]);
+  }, [entries, selectedProjectId, selectedUserId, selectedTaskId, dateFrom, dateTo, weekStart, weekEnd]);
 
   const isEntryBillable = (entry: TimeEntry) => {
-    if (entry.tags?.includes("non-billable") || entry.entryType === "non-billable") {
+    if (entry.tags?.includes("non-billable")) {
       return false;
     }
     if (!entry.taskId) {
       return false;
     }
     const project = projectLookup.get(entry.projectId);
-    return Boolean(project?.clientId || project?.clientName || project?.hourlyRate);
+    return Boolean(project?.hourlyRate);
   };
 
   const totalSeconds = filteredEntries.reduce(

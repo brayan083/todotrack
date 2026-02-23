@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { ProjectService, type Project } from "@/services/project.service";
 import { UserService, type UserData } from "@/services/user.service";
 import { TaskService, type Task } from "@/services/task.service";
-import { InvitationService, type Invitation } from "@/services/invitation.service";
-import { ActivityLogService } from "@/services/activity-log.service";
 import { db } from "@/lib/firebase.config";
-import type { InviteRole, ProjectRole } from "@/lib/roles";
+import type { ProjectRole } from "@/lib/roles";
+import { useWorkspaceStore } from "@/stores";
 
 export type AssigneeOption = {
   uid: string;
@@ -25,18 +24,14 @@ export const useProjectTasksPageData = ({
   projectId,
   user,
 }: UseProjectTasksPageDataArgs) => {
+  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
+  const workspace = useWorkspaceStore((state) => state.workspace);
   const [project, setProject] = useState<Project | null>(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assignees, setAssignees] = useState<AssigneeOption[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, UserData>>({});
   const [loading, setLoading] = useState(true);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [inviteMode, setInviteMode] = useState<"email" | "uid">("email");
-  const [inviteValue, setInviteValue] = useState("");
-  const [inviteRole, setInviteRole] = useState<InviteRole>("member");
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const [memberActionLoadingId, setMemberActionLoadingId] = useState<string | null>(null);
 
@@ -46,14 +41,13 @@ export const useProjectTasksPageData = ({
     let isMounted = true;
 
     const loadData = async () => {
-      if (!user || !projectId) {
+      if (!user || !projectId || !workspaceId) {
         if (isMounted) {
           setProject(null);
           setProjectLoaded(false);
           setTasks([]);
           setAssignees([]);
           setUsersMap({});
-          setInvitations([]);
           setLoading(false);
         }
         return;
@@ -94,6 +88,7 @@ export const useProjectTasksPageData = ({
 
         unsubscribeTasks = taskService.subscribeToProjectTasks(
           projectId,
+          workspaceId,
           (projectTasks) => {
             if (isMounted) {
               setTasks(projectTasks);
@@ -103,20 +98,6 @@ export const useProjectTasksPageData = ({
             console.error("Error loading project tasks:", error);
           }
         );
-
-        try {
-          const invitationService = InvitationService.getInstance(db);
-          const projectInvitations = await invitationService.getProjectInvitations(projectId);
-          if (isMounted) {
-            setInvitations(projectInvitations);
-          }
-        } catch (inviteLoadError) {
-          console.error("Error loading invitations:", inviteLoadError);
-          if (isMounted) {
-            setInvitations([]);
-            setInviteError("Unable to load invitations");
-          }
-        }
       } catch (error) {
         console.error("Error loading project tasks:", error);
         if (isMounted) {
@@ -132,7 +113,12 @@ export const useProjectTasksPageData = ({
       unsubscribeProject?.();
       unsubscribeTasks?.();
     };
-  }, [user, projectId]);
+  }, [user, workspaceId, projectId]);
+
+  const memberIds = useMemo(
+    () => (workspace?.members || project?.members || []).filter(Boolean),
+    [workspace?.members, project?.members]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -146,7 +132,6 @@ export const useProjectTasksPageData = ({
         return;
       }
 
-      const memberIds = (project.members || []).filter(Boolean);
       if (memberIds.length === 0) {
         if (isMounted) {
           setAssignees([]);
@@ -186,99 +171,8 @@ export const useProjectTasksPageData = ({
     return () => {
       isMounted = false;
     };
-  }, [project?.id, project?.members?.join("|")]);
+  }, [project, memberIds]);
 
-  const handleSendInvite = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!user || !project) return;
-
-    setInviteError(null);
-    const value = inviteValue.trim();
-    if (!value) {
-      setInviteError(inviteMode === "email" ? "Email is required" : "UID is required");
-      return;
-    }
-
-    try {
-      setInviteLoading(true);
-      const userService = UserService.getInstance(db);
-      const invitationService = InvitationService.getInstance(db);
-      const activityLogService = ActivityLogService.getInstance(db);
-
-      let email = "";
-      let inviteeId: string | undefined;
-
-      if (inviteMode === "email") {
-        email = value.toLowerCase();
-        if (!/.+@.+\..+/.test(email)) {
-          setInviteError("Invalid email format");
-          return;
-        }
-
-        const existingUser = await userService.getUserByEmail(email);
-        if (existingUser) {
-          inviteeId = existingUser.uid;
-        }
-      } else {
-        const existingUser = await userService.getUser(value);
-        if (!existingUser) {
-          setInviteError("No user found with that UID");
-          return;
-        }
-        email = (existingUser.email || "").toLowerCase();
-        if (!email) {
-          setInviteError("User does not have an email configured");
-          return;
-        }
-        inviteeId = existingUser.uid;
-      }
-
-      if (inviteeId && project.members?.includes(inviteeId)) {
-        setInviteError("User is already a member of this project");
-        return;
-      }
-
-      await invitationService.createInvitation({
-        projectId: project.id,
-        email,
-        invitedBy: user.uid,
-        role: inviteRole,
-        inviteeId,
-      });
-
-      await activityLogService.logMemberInvited(
-        project.id,
-        user.uid,
-        user.displayName || user.email || "User",
-        email
-      );
-
-      const refreshedInvites = await invitationService.getProjectInvitations(project.id);
-      setInvitations(refreshedInvites);
-      setInviteValue("");
-    } catch (error: any) {
-      setInviteError(error.message || "Error sending invitation");
-    } finally {
-      setInviteLoading(false);
-    }
-  };
-
-  const handleRevokeInvite = async (inviteId: string) => {
-    if (!projectId) return;
-
-    try {
-      setInviteLoading(true);
-      const invitationService = InvitationService.getInstance(db);
-      await invitationService.revokeInvitation(inviteId);
-      const refreshedInvites = await invitationService.getProjectInvitations(projectId);
-      setInvitations(refreshedInvites);
-    } catch (error: any) {
-      setInviteError(error.message || "Error revoking invitation");
-    } finally {
-      setInviteLoading(false);
-    }
-  };
 
   const handleUpdateMemberRole = async (memberId: string, role: ProjectRole) => {
     if (!project) return;
@@ -306,40 +200,6 @@ export const useProjectTasksPageData = ({
     }
   };
 
-  const handleRemoveMember = async (memberId: string) => {
-    if (!project) return;
-    const confirmed = window.confirm("Remove this member from the project?");
-    if (!confirmed) return;
-
-    setMemberActionError(null);
-
-    try {
-      setMemberActionLoadingId(memberId);
-      const projectService = ProjectService.getInstance(db);
-      await projectService.removeMember(project.id, memberId);
-      setProject((prev) => {
-        if (!prev) return prev;
-        const nextRoles = { ...(prev.userRoles || {}) };
-        delete nextRoles[memberId];
-        return {
-          ...prev,
-          members: (prev.members || []).filter((id) => id !== memberId),
-          userRoles: nextRoles,
-        };
-      });
-      setAssignees((prev) => prev.filter((assignee) => assignee.uid !== memberId));
-      setUsersMap((prev) => {
-        const next = { ...prev };
-        delete next[memberId];
-        return next;
-      });
-    } catch (error: any) {
-      setMemberActionError(error.message || "Unable to remove member");
-    } finally {
-      setMemberActionLoadingId(null);
-    }
-  };
-
   return {
     project,
     projectLoaded,
@@ -349,20 +209,8 @@ export const useProjectTasksPageData = ({
     assignees,
     usersMap,
     loading,
-    invitations,
-    inviteMode,
-    inviteValue,
-    inviteRole,
-    inviteLoading,
-    inviteError,
     memberActionError,
     memberActionLoadingId,
-    setInviteMode,
-    setInviteValue,
-    setInviteRole,
-    handleSendInvite,
-    handleRevokeInvite,
     handleUpdateMemberRole,
-    handleRemoveMember,
   };
 };

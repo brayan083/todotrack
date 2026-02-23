@@ -4,8 +4,8 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Plus, Loader2, AlertCircle, UserPlus } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,10 +24,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ProjectService, type Project } from '@/services';
-import { ClientService, type Client } from '@/services/client.service';
-import { CreateClientDialog } from '@/components/create-client-dialog';
 import { db } from '@/lib/firebase.config';
 import type { ProjectRole } from '@/lib/roles';
+import { useWorkspace } from '@/hooks';
 
 const COLORS = [
   '#ef4444', // red
@@ -40,6 +39,8 @@ const COLORS = [
   '#ec4899', // pink
 ];
 
+type ProjectVisibility = 'public' | 'private';
+
 interface CreateProjectDialogProps {
   userId: string;
   onProjectCreated: (project: Project) => void;
@@ -51,47 +52,25 @@ export function CreateProjectDialog({
   onProjectCreated,
   children,
 }: CreateProjectDialogProps) {
+  const { workspace, workspaceId } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loadingClients, setLoadingClients] = useState(true);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    color: string;
+    budget: string;
+    hourlyRate: string;
+    visibility: ProjectVisibility;
+  }>({
     name: '',
     description: '',
     color: COLORS[4], // cyan default
-    clientId: 'none',
     budget: '',
     hourlyRate: '',
-    estimatedTime: '',
+    visibility: 'private',
   });
-
-  // Cargar clientes cuando el diálogo se abre
-  useEffect(() => {
-    if (open && userId) {
-      loadClients();
-    }
-  }, [open, userId]);
-
-  const loadClients = async () => {
-    try {
-      setLoadingClients(true);
-      const clientService = ClientService.getInstance(db);
-      const userClients = await clientService.getAllClients();
-      // Filtrar solo los clientes del usuario actual
-      const filteredClients = userClients.filter(client => client.ownerId === userId);
-      setClients(filteredClients);
-    } catch (error) {
-      console.error('Error loading clients:', error);
-    } finally {
-      setLoadingClients(false);
-    }
-  };
-
-  const handleClientCreated = (newClient: Client) => {
-    setClients(prev => [...prev, newClient]);
-    setFormData({ ...formData, clientId: newClient.id });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,27 +84,33 @@ export function CreateProjectDialog({
     try {
       setLoading(true);
       const projectService = ProjectService.getInstance(db);
-
-      // Obtener el cliente seleccionado si existe
-      const selectedClient = formData.clientId && formData.clientId !== 'none'
-        ? clients.find(c => c.id === formData.clientId)
-        : undefined;
+      if (!workspaceId) {
+        throw new Error('Workspace is required');
+      }
 
       // Construir objeto con todos los campos
       const ownerRole: ProjectRole = 'owner';
+      const visibility: ProjectVisibility =
+        formData.visibility === 'public' ? 'public' : 'private';
+      const workspaceOwnerId = workspace?.ownerId;
+      const userRoles: Record<string, ProjectRole> = { [userId]: ownerRole };
+
+      if (workspaceOwnerId && workspaceOwnerId !== userId) {
+        userRoles[workspaceOwnerId] = 'admin';
+      }
+
       const projectData = {
+        workspaceId,
         name: formData.name.trim(),
         description: formData.description.trim() || '',
         color: formData.color,
-        clientId: (formData.clientId && formData.clientId !== 'none') ? formData.clientId : undefined,
-        clientName: selectedClient?.name || undefined,
         members: [userId],
         ownerId: userId,
         isArchived: false,
+        visibility,
         budget: formData.budget && !isNaN(parseFloat(formData.budget)) ? parseFloat(formData.budget) : null,
         hourlyRate: formData.hourlyRate && !isNaN(parseFloat(formData.hourlyRate)) ? parseFloat(formData.hourlyRate) : null,
-        estimatedTime: formData.estimatedTime.trim() || '',
-        userRoles: { [userId]: ownerRole },
+        userRoles,
       };
 
       const projectId = await projectService.createProject(projectData);
@@ -133,17 +118,16 @@ export function CreateProjectDialog({
       // Crear el objeto de proyecto completo para el callback
       const createdProject: Project = {
         id: projectId,
+        workspaceId: projectData.workspaceId,
         name: projectData.name,
         description: projectData.description,
         color: projectData.color,
-        clientId: projectData.clientId || undefined,
-        clientName: projectData.clientName || undefined,
         members: projectData.members,
         ownerId: projectData.ownerId,
         isArchived: projectData.isArchived,
+        visibility: projectData.visibility,
         budget: projectData.budget,
         hourlyRate: projectData.hourlyRate,
-        estimatedTime: projectData.estimatedTime,
         userRoles: projectData.userRoles,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -156,10 +140,9 @@ export function CreateProjectDialog({
         name: '',
         description: '',
         color: COLORS[4],
-        clientId: 'none',
         budget: '',
         hourlyRate: '',
-        estimatedTime: '',
+        visibility: 'private',
       });
 
       setOpen(false);
@@ -238,49 +221,22 @@ export function CreateProjectDialog({
             </div>
           </div>
 
-          {/* Client Name */}
+          {/* Visibility */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="clientId">Client (Optional)</Label>
-              <CreateClientDialog
-                userId={userId}
-                onClientSaved={handleClientCreated}
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto p-0 text-xs text-primary hover:text-primary/80"
-                  disabled={loading}
-                >
-                  <UserPlus className="h-3 w-3 mr-1" />
-                  New Client
-                </Button>
-              </CreateClientDialog>
-            </div>
+            <Label htmlFor="visibility">Visibility</Label>
             <Select
-              value={formData.clientId}
-              onValueChange={(value) => setFormData({ ...formData, clientId: value })}
-              disabled={loading || loadingClients}
+              value={formData.visibility}
+              onValueChange={(value) =>
+                setFormData({ ...formData, visibility: value as ProjectVisibility })
+              }
+              disabled={loading}
             >
               <SelectTrigger>
-                <SelectValue placeholder={loadingClients ? "Loading clients..." : "Select a client (optional)"} />
+                <SelectValue placeholder="Select visibility" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">
-                  <span className="text-muted-foreground">No client</span>
-                </SelectItem>
-                {clients.length === 0 ? (
-                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                    No clients yet. Create one to get started.
-                  </div>
-                ) : (
-                  clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))
-                )}
+                <SelectItem value="private">Private</SelectItem>
+                <SelectItem value="public">Public</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -321,17 +277,6 @@ export function CreateProjectDialog({
             </div>
           </div>
 
-          {/* Estimated Time */}
-          <div className="space-y-2">
-            <Label htmlFor="estimatedTime">Estimated Time (Optional)</Label>
-            <Input
-              id="estimatedTime"
-              placeholder="e.g. 40h, 2 weeks, 3 months"
-              value={formData.estimatedTime}
-              onChange={(e) => setFormData({ ...formData, estimatedTime: e.target.value })}
-              disabled={loading}
-            />
-          </div>
 
           {/* Submit Button */}
           <Button

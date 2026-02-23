@@ -13,6 +13,7 @@ import {
 
 export interface ActivityLog {
   id: string;
+  workspaceId: string;
   projectId: string;
   userId: string;
   userDisplayName: string;
@@ -23,6 +24,7 @@ export interface ActivityLog {
 }
 
 export interface LogActionInput {
+  workspaceId: string;
   projectId: string;
   userId: string;
   userDisplayName: string;
@@ -71,6 +73,7 @@ export class ActivityLogService extends BaseService {
    * Log específico: Crear tarea
    */
   public async logTaskCreated(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
@@ -78,10 +81,11 @@ export class ActivityLogService extends BaseService {
     taskTitle: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
-      action: 'created_task',
+      action: 'task_created',
       targetId: taskId,
       targetName: taskTitle,
     });
@@ -91,6 +95,7 @@ export class ActivityLogService extends BaseService {
    * Log específico: Completar tarea
    */
   public async logTaskCompleted(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
@@ -98,10 +103,11 @@ export class ActivityLogService extends BaseService {
     taskTitle: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
-      action: 'completed_task',
+      action: 'task_completed',
       targetId: taskId,
       targetName: taskTitle,
     });
@@ -111,6 +117,7 @@ export class ActivityLogService extends BaseService {
    * Log específico: Actualizar tarea
    */
   public async logTaskUpdated(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
@@ -118,10 +125,11 @@ export class ActivityLogService extends BaseService {
     taskTitle: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
-      action: 'updated_task',
+      action: 'task_updated',
       targetId: taskId,
       targetName: taskTitle,
     });
@@ -131,6 +139,7 @@ export class ActivityLogService extends BaseService {
    * Log específico: Registrar tiempo
    */
   public async logTimeLogged(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
@@ -143,10 +152,11 @@ export class ActivityLogService extends BaseService {
       : `${durationHours}h registradas`;
 
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
-      action: 'logged_time',
+      action: 'time_logged',
       targetName: description,
     });
   }
@@ -155,16 +165,18 @@ export class ActivityLogService extends BaseService {
    * Log específico: Crear proyecto
    */
   public async logProjectCreated(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
     projectName: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
-      action: 'created_project',
+      action: 'project_created',
       targetId: projectId,
       targetName: projectName,
     });
@@ -174,16 +186,18 @@ export class ActivityLogService extends BaseService {
    * Log específico: Archivar proyecto
    */
   public async logProjectArchived(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
     projectName: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
-      action: 'archived_project',
+      action: 'project_archived',
       targetId: projectId,
       targetName: projectName,
     });
@@ -193,12 +207,14 @@ export class ActivityLogService extends BaseService {
    * Log especifico: Invitar miembro
    */
   public async logMemberInvited(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string,
     invitee: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,
@@ -211,11 +227,13 @@ export class ActivityLogService extends BaseService {
    * Log especifico: Miembro unido
    */
   public async logMemberJoined(
+    workspaceId: string,
     projectId: string,
     userId: string,
     userDisplayName: string
   ): Promise<void> {
     await this.logAction({
+      workspaceId,
       projectId,
       userId,
       userDisplayName,

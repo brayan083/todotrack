@@ -1,4 +1,4 @@
-import { Archive, Clock, User2 } from "lucide-react";
+import { Archive } from "lucide-react";
 import type { Project } from "@/services/project.service";
 import type { UserData } from "@/services/user.service";
 import { Badge } from "@/components/ui/badge";
@@ -26,10 +26,8 @@ export const ProjectsTable = ({
           <TableRow>
             <TableHead className="w-[40px]"></TableHead>
             <TableHead>Name</TableHead>
-            <TableHead>Client</TableHead>
             <TableHead>Budget</TableHead>
             <TableHead>Rate</TableHead>
-            <TableHead>Estimated Time</TableHead>
             <TableHead className="w-[180px]">Members</TableHead>
             <TableHead className="w-[100px]">Status</TableHead>
           </TableRow>
@@ -74,16 +72,6 @@ export const ProjectsTable = ({
                   </div>
                 </TableCell>
                 <TableCell>
-                  {project.clientName ? (
-                    <div className="flex items-center gap-1.5">
-                      <User2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-sm">{project.clientName}</span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
                   {project.budget !== null && project.budget !== undefined ? (
                     <span className="text-sm font-medium text-green-700 dark:text-green-400">
                       ${project.budget.toLocaleString()}
@@ -97,16 +85,6 @@ export const ProjectsTable = ({
                     <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
                       ${project.hourlyRate}/h
                     </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {project.estimatedTime ? (
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-sm">{project.estimatedTime}</span>
-                    </div>
                   ) : (
                     <span className="text-sm text-muted-foreground">-</span>
                   )}

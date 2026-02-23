@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/stores";
+import { useWorkspace } from "@/hooks";
 import { ProjectService, type Project } from "@/services/project.service";
 import { TaskService, type Task } from "@/services/task.service";
 import { db } from "@/lib/firebase.config";
@@ -15,6 +16,7 @@ import { useRouter } from "next/navigation";
 const GlobalSearchModal: React.FC = () => {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { workspaceId } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -27,7 +29,7 @@ const GlobalSearchModal: React.FC = () => {
     if (!open) return;
 
     const loadData = async () => {
-      if (!user || hasLoadedRef.current) return;
+      if (!user || !workspaceId || hasLoadedRef.current) return;
 
       try {
         setLoading(true);
@@ -35,8 +37,8 @@ const GlobalSearchModal: React.FC = () => {
         const taskService = TaskService.getInstance(db);
 
         const [allProjects, allTasks] = await Promise.all([
-          projectService.getAllProjects(user.uid),
-          taskService.getAllTasks(user.uid),
+          projectService.getAllProjects(user.uid, workspaceId),
+          taskService.getAllTasks(user.uid, workspaceId),
         ]);
 
         setProjects(allProjects);
@@ -50,7 +52,7 @@ const GlobalSearchModal: React.FC = () => {
     };
 
     loadData();
-  }, [open, user]);
+  }, [open, user, workspaceId]);
 
   useEffect(() => {
     if (open) {

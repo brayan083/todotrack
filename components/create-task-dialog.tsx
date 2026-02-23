@@ -23,18 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { TagService, TaskService, type Task } from '@/services';
 import { db } from '@/lib/firebase.config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useWorkspace } from '@/hooks';
 
 const PRIORITIES = [
   { value: 'low', label: 'Low' },
@@ -46,8 +38,10 @@ const PRIORITIES = [
 const STATUSES = [
   { value: 'todo', label: 'To Do' },
   { value: 'in-progress', label: 'In Progress' },
-  { value: 'done', label: 'Done' },
+  { value: 'completed', label: 'Completed' },
 ];
+
+type TaskStatus = 'todo' | 'in-progress' | 'completed';
 
 interface CreateTaskDialogProps {
   projectId: string;
@@ -64,16 +58,25 @@ export function CreateTaskDialog({
   onTaskCreated,
   disabled = false,
 }: CreateTaskDialogProps) {
+  const { workspaceId } = useWorkspace();
   const assigneeOptions = assignees.length > 0 ? assignees : [{ uid: userId, label: "Me" }];
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string;
+    description: string;
+    priority: string;
+    status: TaskStatus;
+    assigneeId: string;
+    dueDate: string;
+    tags: string;
+  }>({
     title: '',
     description: '',
     priority: 'medium',
     status: 'todo',
-    assigneeIds: assigneeOptions.length > 0 ? [assigneeOptions[0].uid] : [userId],
+    assigneeId: assigneeOptions.length > 0 ? assigneeOptions[0].uid : userId,
     dueDate: '',
     tags: '',
   });
@@ -93,7 +96,11 @@ export function CreateTaskDialog({
       const tagService = TagService.getInstance(db);
 
       // Obtener todas las tareas del proyecto para calcular la posición
-      const existingTasks = await taskService.getAllTasks(userId, projectId);
+      if (!workspaceId) {
+        throw new Error('Workspace is required');
+      }
+
+      const existingTasks = await taskService.getAllTasks(userId, workspaceId, projectId);
       const maxPosition = existingTasks.length > 0 
         ? Math.max(...existingTasks.map(t => t.position || 0))
         : 0;
@@ -107,16 +114,20 @@ export function CreateTaskDialog({
         : [];
 
       const newTask: Omit<Task, 'id' | 'createdAt'> = {
+        workspaceId,
         projectId,
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
         status: formData.status,
-        assigneeIds: formData.assigneeIds,
-        assigneeId: formData.assigneeIds[0] || "",
+        assigneeId: formData.assigneeId,
         position: maxPosition + 1,
         dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
         priority: formData.priority,
         tagIds: tags.map((tag) => tag.id),
+        subtasks: [],
+        attachments: [],
+        isDeleted: false,
+        deletedAt: null,
       };
 
       const taskId = await taskService.createTask(newTask);
@@ -136,7 +147,7 @@ export function CreateTaskDialog({
         description: '',
         priority: 'medium',
         status: 'todo',
-        assigneeIds: assigneeOptions.length > 0 ? [assigneeOptions[0].uid] : [userId],
+        assigneeId: assigneeOptions.length > 0 ? assigneeOptions[0].uid : userId,
         dueDate: '',
         tags: '',
       });
@@ -154,18 +165,6 @@ export function CreateTaskDialog({
     setOpen(nextOpen);
   };
 
-  const toggleAssignee = (assigneeId: string) => {
-    setFormData((prev) => {
-      const nextIds = prev.assigneeIds.includes(assigneeId)
-        ? prev.assigneeIds.filter((id) => id !== assigneeId)
-        : [...prev.assigneeIds, assigneeId];
-      return { ...prev, assigneeIds: nextIds };
-    });
-  };
-
-  const selectedAssignees = assigneeOptions.filter((assignee) =>
-    formData.assigneeIds.includes(assignee.uid)
-  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -234,7 +233,10 @@ export function CreateTaskDialog({
           {/* Status */}
           <div className="space-y-2">
             <Label htmlFor="status">Status</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData({ ...formData, status: value as TaskStatus })}
+            >
               <SelectTrigger id="status" disabled={loading}>
                 <SelectValue />
               </SelectTrigger>
@@ -251,33 +253,17 @@ export function CreateTaskDialog({
           {/* Assignee */}
           <div className="space-y-2">
             <Label htmlFor="assignee">Assignee</Label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-between"
-                  disabled={loading}
-                >
-                  {selectedAssignees.length > 0 ? (
-                    <span className="truncate">
-                      {selectedAssignees.slice(0, 2).map((assignee) => assignee.label).join(", ")}
-                      {selectedAssignees.length > 2 ? ` +${selectedAssignees.length - 2}` : ""}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">Unassigned</span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuLabel>Assign to</DropdownMenuLabel>
-                <DropdownMenuSeparator />
+            <Select
+              value={formData.assigneeId}
+              onValueChange={(value) => setFormData({ ...formData, assigneeId: value })}
+              disabled={loading}
+            >
+              <SelectTrigger id="assignee">
+                <SelectValue placeholder="Select assignee" />
+              </SelectTrigger>
+              <SelectContent>
                 {assigneeOptions.map((assignee) => (
-                  <DropdownMenuCheckboxItem
-                    key={assignee.uid}
-                    checked={formData.assigneeIds.includes(assignee.uid)}
-                    onCheckedChange={() => toggleAssignee(assignee.uid)}
-                  >
+                  <SelectItem key={assignee.uid} value={assignee.uid}>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-5 w-5">
                         {assignee.photoURL && <AvatarImage src={assignee.photoURL} />}
@@ -287,14 +273,10 @@ export function CreateTaskDialog({
                       </Avatar>
                       <span>{assignee.label}</span>
                     </div>
-                  </DropdownMenuCheckboxItem>
+                  </SelectItem>
                 ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setFormData({ ...formData, assigneeIds: [] })}>
-                  Clear selection
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Due Date */}

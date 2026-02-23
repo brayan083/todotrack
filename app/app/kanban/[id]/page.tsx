@@ -30,7 +30,7 @@ import {
   UNASSIGNED_FILTER_VALUE,
 } from "@/lib/task-constants";
 import { useAuthStore } from "@/stores";
-import { useTimer } from "@/hooks";
+import { useTimer, useWorkspace } from "@/hooks";
 import { canDeleteTasks, canEditTasks, getUserRole } from "@/lib/roles";
 import { useKanbanTasks } from "../_hooks/use-kanban-tasks";
 import { KanbanTaskCard } from "../_components/kanban-task-card";
@@ -55,6 +55,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     resumeTimer,
     stopTimer,
   } = useTimer();
+  const { workspaceId, workspace } = useWorkspace();
   const [project, setProject] = useState<Project | null>(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -79,7 +80,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     let isMounted = true;
 
     const loadData = async () => {
-      if (!user || !resolvedParams.id) {
+      if (!user || !resolvedParams.id || !workspaceId) {
         if (isMounted) {
           setProject(null);
           setProjectLoaded(false);
@@ -96,7 +97,6 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
         setProjectLoaded(false);
         const projectService = ProjectService.getInstance(db);
         const taskService = TaskService.getInstance(db);
-
         unsubscribeProject = projectService.subscribeToProject(
           resolvedParams.id,
           (nextProject) => {
@@ -126,6 +126,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
 
         unsubscribeTasks = taskService.subscribeToProjectTasks(
           resolvedParams.id,
+          workspaceId,
           (projectTasks) => {
             if (isMounted) {
               setTasks(projectTasks);
@@ -150,7 +151,9 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
       unsubscribeProject?.();
       unsubscribeTasks?.();
     };
-  }, [user, resolvedParams.id]);
+  }, [user, resolvedParams.id, workspaceId]);
+
+  const memberKey = project?.members?.join("|") ?? "";
 
   useEffect(() => {
     let isMounted = true;
@@ -204,9 +207,9 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     return () => {
       isMounted = false;
     };
-  }, [project?.id, project?.members?.join("|")]);
+  }, [project, memberKey]);
 
-  const currentUserRole = getUserRole(project, user?.uid);
+  const currentUserRole = getUserRole(project, user?.uid, workspace?.members);
   const canEditTaskActions = canEditTasks(currentUserRole);
   const canDeleteTaskActions = canDeleteTasks(currentUserRole);
 
@@ -273,7 +276,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     (dueDateFrom ? 1 : 0) +
     (dueDateTo ? 1 : 0);
 
-  const { todoTasks, inProgressTasks, doneTasks } = useKanbanTasks({
+  const { todoTasks, inProgressTasks, completedTasks } = useKanbanTasks({
     tasks,
     searchTerm,
     statusFilters,
@@ -349,7 +352,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     if (!selectedTask) return;
     const latest = tasks.find((task) => task.id === selectedTask.id);
     if (latest && latest !== selectedTask) {
-      setSelectedTask(latest);
+      queueMicrotask(() => setSelectedTask(latest));
     }
   }, [tasks, selectedTask]);
 
@@ -362,7 +365,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
       status: editData.status ?? selectedTask.status,
       priority: editData.priority ?? selectedTask.priority,
       dueDate: editData.dueDate ?? selectedTask.dueDate,
-      assigneeIds: editData.assigneeIds ?? selectedTask.assigneeIds ?? [],
+      assigneeId: editData.assigneeId ?? selectedTask.assigneeId ?? "",
       tagIds: editData.tagIds ?? selectedTask.tagIds ?? [],
     };
 
@@ -374,7 +377,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
       status: payload.status || "todo",
       priority: payload.priority || "medium",
       dueDate: normalizeDate(payload.dueDate),
-      assigneeIds: payload.assigneeIds,
+      assigneeId: payload.assigneeId,
       tagIds: payload.tagIds,
     });
 
@@ -384,7 +387,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
       status: selectedTask.status || "todo",
       priority: selectedTask.priority || "medium",
       dueDate: normalizeDate(selectedTask.dueDate),
-      assigneeIds: selectedTask.assigneeIds || [],
+      assigneeId: selectedTask.assigneeId || "",
       tagIds: selectedTask.tagIds || [],
     });
 
@@ -412,11 +415,8 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
           updates.dueDate = payload.dueDate ? new Date(payload.dueDate) : undefined;
         }
 
-        const selectedAssigneeIds = selectedTask.assigneeIds || [];
-        const payloadAssigneeIds = payload.assigneeIds || [];
-        if (JSON.stringify(payloadAssigneeIds) !== JSON.stringify(selectedAssigneeIds)) {
-          updates.assigneeIds = payloadAssigneeIds;
-          updates.assigneeId = payloadAssigneeIds[0] || "";
+        if (payload.assigneeId !== selectedTask.assigneeId) {
+          updates.assigneeId = payload.assigneeId || "";
         }
 
         const selectedTagIds = selectedTask.tagIds || [];
@@ -459,10 +459,10 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     }
 
     // Mapeo de droppableId a status
-    const statusMap: Record<string, string> = {
+    const statusMap: Record<string, Task["status"]> = {
       "todo": "todo",
       "in-progress": "in-progress",
-      "done": "done"
+      "completed": "completed",
     };
 
     const newStatus = statusMap[destination.droppableId];
@@ -475,7 +475,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
     const columns: Record<string, Task[]> = {
       "todo": todoTasks,
       "in-progress": inProgressTasks,
-      "done": doneTasks,
+      "completed": completedTasks,
     };
 
     const sourceTasks = [...(columns[source.droppableId] || [])];
@@ -815,7 +815,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                           key={task.id}
                           task={task}
                           index={index}
-                          assignees={(task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []))
+                          assignees={(task.assigneeId ? [task.assigneeId] : [])
                             .map((assigneeId) => getUserInfo(assigneeId))
                             .filter((assignee): assignee is KanbanAssignee => Boolean(assignee))}
                           canEdit={canEditTaskActions}
@@ -870,7 +870,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                           key={task.id}
                           task={task}
                           index={index}
-                          assignees={(task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []))
+                          assignees={(task.assigneeId ? [task.assigneeId] : [])
                             .map((assigneeId) => getUserInfo(assigneeId))
                             .filter((assignee): assignee is KanbanAssignee => Boolean(assignee))}
                           canEdit={canEditTaskActions}
@@ -891,14 +891,14 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
               </Droppable>
             </div>
 
-            {/* Column: Done */}
+            {/* Column: Completed */}
             <div className="flex-1 flex flex-col min-w-[320px] max-w-md bg-secondary/50 rounded-xl border border-border">
               <div className="p-4 flex items-center justify-between border-b border-border/50">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                  <h3 className="font-semibold text-foreground">Done</h3>
+                  <h3 className="font-semibold text-foreground">Completed</h3>
                   <Badge variant="secondary" className="px-2 py-0.5 rounded-full font-medium">
-                    {doneTasks.length}
+                    {completedTasks.length}
                   </Badge>
                 </div>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -906,7 +906,7 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                 </Button>
               </div>
               
-              <Droppable droppableId="done" isDropDisabled={!canEditTaskActions}>
+              <Droppable droppableId="completed" isDropDisabled={!canEditTaskActions}>
                 {(provided, snapshot) => (
                   <div 
                     ref={provided.innerRef}
@@ -915,17 +915,17 @@ const KanbanPage: React.FC<KanbanPageProps> = ({ params }) => {
                       snapshot.isDraggingOver ? "bg-secondary/70" : ""
                     }`}
                   >
-                    {doneTasks.length === 0 ? (
+                    {completedTasks.length === 0 ? (
                       <div className="border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center justify-center text-muted-foreground text-sm">
                         No completed tasks
                       </div>
                     ) : (
-                      doneTasks.map((task, index) => (
+                      completedTasks.map((task, index) => (
                         <KanbanTaskCard
                           key={task.id}
                           task={task}
                           index={index}
-                          assignees={(task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []))
+                          assignees={(task.assigneeId ? [task.assigneeId] : [])
                             .map((assigneeId) => getUserInfo(assigneeId))
                             .filter((assignee): assignee is KanbanAssignee => Boolean(assignee))}
                           canEdit={canEditTaskActions}

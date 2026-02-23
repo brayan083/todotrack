@@ -3,7 +3,7 @@
  */
 
 import { useEffect } from 'react';
-import { useAuthStore, useTimerStore, useProjectStore, useTaskStore } from '@/stores';
+import { useAuthStore, useTimerStore, useProjectStore, useTaskStore, useWorkspaceStore } from '@/stores';
 
 /**
  * Hook para inicializar la autenticación
@@ -42,11 +42,35 @@ export function useAuth() {
 }
 
 /**
+ * Hook para obtener el workspace actual
+ */
+export function useWorkspace() {
+  const workspace = useWorkspaceStore((state) => state.workspace);
+  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
+  const workspaces = useWorkspaceStore((state) => state.workspaces);
+  const loading = useWorkspaceStore((state) => state.loading);
+  const setWorkspace = useWorkspaceStore((state) => state.setWorkspace);
+  const loadWorkspaces = useWorkspaceStore((state) => state.loadWorkspaces);
+  const addWorkspace = useWorkspaceStore((state) => state.addWorkspace);
+
+  return {
+    workspace,
+    workspaceId,
+    workspaces,
+    loading,
+    setWorkspace,
+    loadWorkspaces,
+    addWorkspace,
+  };
+}
+
+/**
  * Hook para el temporizador activo
  * Carga automáticamente el temporizador activo del usuario
  */
 export function useTimer() {
   const user = useAuthStore((state) => state.user);
+  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const {
     activeEntry,
     elapsedSeconds,
@@ -62,12 +86,12 @@ export function useTimer() {
   } = useTimerStore();
 
   useEffect(() => {
-    if (user) {
-      loadActiveTimer(user.uid);
+    if (user && workspaceId) {
+      loadActiveTimer(user.uid, workspaceId);
     } else {
       clearTimer();
     }
-  }, [user, loadActiveTimer, clearTimer]);
+  }, [user, workspaceId, loadActiveTimer, clearTimer]);
 
   return {
     activeEntry,
@@ -76,7 +100,9 @@ export function useTimer() {
     isPaused,
     taskId,
     startTimer: (data: { projectId: string; taskId?: string | null; description?: string; entryType?: string; tags?: string[] }) =>
-      user ? startTimer(user.uid, data) : Promise.reject('No user'),
+      user && workspaceId
+        ? startTimer(user.uid, { ...data, workspaceId })
+        : Promise.reject('No user or workspace'),
     pauseTimer,
     resumeTimer,
     stopTimer,
@@ -89,6 +115,7 @@ export function useTimer() {
  */
 export function useProjects() {
   const user = useAuthStore((state) => state.user);
+  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const {
     projects,
     selectedProject,
@@ -106,14 +133,14 @@ export function useProjects() {
   } = useProjectStore();
 
   useEffect(() => {
-    if (user) {
-      subscribeToProjects(user.uid);
+    if (user && workspaceId) {
+      subscribeToProjects(user.uid, workspaceId);
     }
-    
+
     return () => {
       unsubscribe();
     };
-  }, [user, subscribeToProjects, unsubscribe]);
+  }, [user, workspaceId, subscribeToProjects, unsubscribe]);
 
   return {
     projects,
@@ -136,6 +163,7 @@ export function useProjects() {
  */
 export function useTasks(projectId?: string) {
   const user = useAuthStore((state) => state.user);
+  const workspaceId = useWorkspaceStore((state) => state.workspaceId);
   const {
     tasks,
     filteredTasks,
@@ -158,10 +186,10 @@ export function useTasks(projectId?: string) {
   } = useTaskStore();
 
   useEffect(() => {
-    if (user) {
-      loadTasks(user.uid, projectId);
+    if (user && workspaceId) {
+      loadTasks(user.uid, workspaceId, projectId);
     }
-  }, [user, projectId, loadTasks]);
+  }, [user, workspaceId, projectId, loadTasks]);
 
   return {
     tasks,

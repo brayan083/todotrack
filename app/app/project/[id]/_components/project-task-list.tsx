@@ -56,10 +56,9 @@ export const ProjectTaskList: React.FC<ProjectTaskListProps> = ({
   return (
     <div className="space-y-3">
       {filteredTasks.slice(0, visibleTaskCount).map((task) => {
-        const assigneeIds = task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []);
-        const assignedUsers = assigneeIds
-          .map((assigneeId) => usersMap[assigneeId])
-          .filter((user): user is UserData => Boolean(user));
+        const assignedUsers = task.assigneeId
+          ? [usersMap[task.assigneeId]].filter((user): user is UserData => Boolean(user))
+          : [];
         return (
           <ProjectTaskCard
             key={task.id}

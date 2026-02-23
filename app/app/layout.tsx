@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { InvitationService, type Invitation } from '@/services/invitation.service';
-import { ProjectService } from '@/services/project.service';
+import { WorkspaceService } from '@/services/workspace.service';
 import { ActivityLogService } from '@/services/activity-log.service';
 import { db } from '@/lib/firebase.config';
 
@@ -26,7 +26,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [projectNames, setProjectNames] = useState<Record<string, string>>({});
+  const [workspaceNames, setWorkspaceNames] = useState<Record<string, string>>({});
 
   // Redirigir si no está autenticado
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     if (!user) {
       setInvites([]);
-      setProjectNames({});
+      setWorkspaceNames({});
       setInviteLoading(false);
       setInviteError(null);
       return;
@@ -51,7 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setInviteError(null);
 
     const invitationService = InvitationService.getInstance(db);
-    const projectService = ProjectService.getInstance(db);
+    const workspaceService = WorkspaceService.getInstance(db);
 
     unsubscribe = invitationService.subscribeToInvitationsForUser(
       {
@@ -60,23 +60,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       },
       async (results) => {
         if (!isMounted) return;
-        const pending = results.filter((invite) => invite.status === 'pending');
+        const pending = results.filter(
+          (invite) => invite.status === 'pending' && !invite.projectId
+        );
         setInvites(pending);
+        const uniqueWorkspaceIds = Array.from(
+          new Set(pending.map((invite) => invite.workspaceId).filter(Boolean))
+        ) as string[];
 
-        const uniqueProjectIds = Array.from(new Set(pending.map((invite) => invite.projectId)));
-        const projectEntries = await Promise.all(
-          uniqueProjectIds.map(async (projectId) => {
-            const project = await projectService.getProject(projectId);
-            return [projectId, project?.name || 'Unknown project'] as const;
+        const workspaceEntries = await Promise.all(
+          uniqueWorkspaceIds.map(async (workspaceId) => {
+            const workspace = await workspaceService.getWorkspace(workspaceId);
+            return [workspaceId, workspace?.name || 'Workspace'] as const;
           })
         );
 
         if (!isMounted) return;
-        const nameMap: Record<string, string> = {};
-        projectEntries.forEach(([id, name]) => {
-          nameMap[id] = name;
+        const workspaceMap: Record<string, string> = {};
+        workspaceEntries.forEach(([id, name]) => {
+          workspaceMap[id] = name;
         });
-        setProjectNames(nameMap);
+        setWorkspaceNames(workspaceMap);
         setInviteLoading(false);
       },
       (error) => {
@@ -105,7 +109,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       const activityLogService = ActivityLogService.getInstance(db);
       await activityLogService.logMemberJoined(
-        invite.projectId,
+        invite.workspaceId,
+        invite.projectId || '',
         user.uid,
         user.displayName || user.email || 'User'
       );
@@ -175,7 +180,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     {invites.map((invite) => (
                       <div key={invite.id} className="rounded-md border border-border bg-background px-3 py-2">
                         <div className="text-sm font-semibold truncate">
-                          {projectNames[invite.projectId] || 'Project'}
+                          {workspaceNames[invite.workspaceId] || 'Workspace'}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">
                           {invite.email} • Role: {invite.role}

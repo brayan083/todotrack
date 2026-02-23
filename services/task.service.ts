@@ -15,37 +15,46 @@ import {
   query, 
   where,
   onSnapshot,
-  serverTimestamp,
-  Timestamp
+  serverTimestamp
 } from 'firebase/firestore';
 
 export interface Task {
   id: string;
+  workspaceId: string;
   projectId: string;
   title: string;
   description?: string;
-  status: string;
-  assigneeIds: string[];
-  assigneeId?: string;
+  status: 'todo' | 'in-progress' | 'completed';
+  assigneeId: string;
   position: number;
   dueDate?: Date;
   priority?: string;
+  subtasks?: Subtask[];
   attachments?: Attachment[];
   tagIds?: string[];
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
   createdAt: Date;
 }
 
+export interface Subtask {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+}
+
 export interface Attachment {
-  // TODO: Definir estructura de adjuntos
   name: string;
   url: string;
+  type?: string;
+  uploadedBy?: string;
 }
 
 export interface Comment {
   id: string;
   taskId: string;
   userId: string;
-  content: string;
+  text: string;
   createdAt: Date;
 }
 
@@ -80,24 +89,22 @@ export class TaskService extends BaseService {
       }
       
       const data = taskDoc.data();
-      const assigneeIds = Array.isArray(data.assigneeIds)
-        ? data.assigneeIds.filter(Boolean)
-        : data.assigneeId
-          ? [data.assigneeId]
-          : [];
       return {
         id: taskDoc.id,
+        workspaceId: data.workspaceId,
         projectId: data.projectId,
         title: data.title,
         description: data.description,
         status: data.status,
-        assigneeIds,
-        assigneeId: assigneeIds[0],
+        assigneeId: data.assigneeId || '',
         position: data.position || 0,
         dueDate: data.dueDate?.toDate(),
         priority: data.priority,
+        subtasks: data.subtasks || [],
         attachments: data.attachments || [],
         tagIds: data.tagIds || [],
+        isDeleted: data.isDeleted || false,
+        deletedAt: data.deletedAt?.toDate() || null,
         createdAt: data.createdAt?.toDate() || new Date(),
       };
     } catch (error: any) {
@@ -111,35 +118,37 @@ export class TaskService extends BaseService {
    * @param userId - ID del usuario
    * @param projectId - ID opcional del proyecto para filtrar
    */
-  public async getAllTasks(userId: string, projectId?: string): Promise<Task[]> {
+  public async getAllTasks(userId: string, workspaceId: string, projectId?: string): Promise<Task[]> {
     try {
       const tasksRef = collection(this.db, this.collectionName);
       // Si se proporciona un projectId, traer todas las tareas del proyecto
       if (projectId) {
-        const q = query(tasksRef, where('projectId', '==', projectId));
+        const q = query(
+          tasksRef,
+          where('projectId', '==', projectId),
+          where('workspaceId', '==', workspaceId)
+        );
         const querySnapshot = await getDocs(q);
         const tasks: Task[] = [];
 
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const assigneeIds = Array.isArray(data.assigneeIds)
-            ? data.assigneeIds.filter(Boolean)
-            : data.assigneeId
-              ? [data.assigneeId]
-              : [];
           tasks.push({
             id: doc.id,
+            workspaceId: data.workspaceId,
             projectId: data.projectId,
             title: data.title,
             description: data.description,
             status: data.status,
-            assigneeIds,
-            assigneeId: assigneeIds[0],
+            assigneeId: data.assigneeId || '',
             position: data.position || 0,
             dueDate: data.dueDate?.toDate(),
             priority: data.priority,
+            subtasks: data.subtasks || [],
             attachments: data.attachments || [],
             tagIds: data.tagIds || [],
+            isDeleted: data.isDeleted || false,
+            deletedAt: data.deletedAt?.toDate() || null,
             createdAt: data.createdAt?.toDate() || new Date(),
           });
         });
@@ -148,8 +157,11 @@ export class TaskService extends BaseService {
       }
 
       const queries = [
-        query(tasksRef, where('assigneeIds', 'array-contains', userId)),
-        query(tasksRef, where('assigneeId', '==', userId)),
+        query(
+          tasksRef,
+          where('assigneeId', '==', userId),
+          where('workspaceId', '==', workspaceId)
+        ),
       ];
 
       const snapshots = await Promise.all(queries.map((q) => getDocs(q)));
@@ -158,24 +170,22 @@ export class TaskService extends BaseService {
       snapshots.forEach((snapshot) => {
         snapshot.forEach((doc) => {
           const data = doc.data();
-          const assigneeIds = Array.isArray(data.assigneeIds)
-            ? data.assigneeIds.filter(Boolean)
-            : data.assigneeId
-              ? [data.assigneeId]
-              : [];
           taskMap.set(doc.id, {
             id: doc.id,
+            workspaceId: data.workspaceId,
             projectId: data.projectId,
             title: data.title,
             description: data.description,
             status: data.status,
-            assigneeIds,
-            assigneeId: assigneeIds[0],
+            assigneeId: data.assigneeId || '',
             position: data.position || 0,
             dueDate: data.dueDate?.toDate(),
             priority: data.priority,
+            subtasks: data.subtasks || [],
             attachments: data.attachments || [],
             tagIds: data.tagIds || [],
+            isDeleted: data.isDeleted || false,
+            deletedAt: data.deletedAt?.toDate() || null,
             createdAt: data.createdAt?.toDate() || new Date(),
           });
         });
@@ -196,11 +206,16 @@ export class TaskService extends BaseService {
    */
   public subscribeToProjectTasks(
     projectId: string,
+    workspaceId: string,
     onChange: (tasks: Task[]) => void,
     onError?: (error: Error) => void
   ): () => void {
     const tasksRef = collection(this.db, this.collectionName);
-    const q = query(tasksRef, where('projectId', '==', projectId));
+    const q = query(
+      tasksRef,
+      where('projectId', '==', projectId),
+      where('workspaceId', '==', workspaceId)
+    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -208,24 +223,22 @@ export class TaskService extends BaseService {
         const tasks: Task[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const assigneeIds = Array.isArray(data.assigneeIds)
-            ? data.assigneeIds.filter(Boolean)
-            : data.assigneeId
-              ? [data.assigneeId]
-              : [];
           tasks.push({
             id: doc.id,
+            workspaceId: data.workspaceId,
             projectId: data.projectId,
             title: data.title,
             description: data.description,
             status: data.status,
-            assigneeIds,
-            assigneeId: assigneeIds[0],
+            assigneeId: data.assigneeId || '',
             position: data.position || 0,
             dueDate: data.dueDate?.toDate(),
             priority: data.priority,
+            subtasks: data.subtasks || [],
             attachments: data.attachments || [],
             tagIds: data.tagIds || [],
+            isDeleted: data.isDeleted || false,
+            deletedAt: data.deletedAt?.toDate() || null,
             createdAt: data.createdAt?.toDate() || new Date(),
           });
         });

@@ -7,3 +7,4 @@ export { useAuthStore } from './auth.store';
 export { useTimerStore } from './timer.store';
 export { useProjectStore } from './project.store';
 export { useTaskStore } from './task.store';
+export { useWorkspaceStore } from './workspace.store';

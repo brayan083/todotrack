@@ -1,4 +1,4 @@
-import { Clock, DollarSign, User2 } from "lucide-react";
+import { Clock, DollarSign } from "lucide-react";
 import type { Project } from "@/services/project.service";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,16 +53,6 @@ export const ProjectDetailsCard = ({
 
         <Separator />
 
-        {project.clientName && (
-          <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Client</h3>
-            <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2">
-              <User2 className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{project.clientName}</span>
-            </div>
-          </div>
-        )}
-
         {(project.budget !== null || project.hourlyRate !== null) && (
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-muted-foreground">Financial</h3>
@@ -89,15 +79,6 @@ export const ProjectDetailsCard = ({
           </div>
         )}
 
-        {project.estimatedTime && (
-          <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Estimated Time</h3>
-            <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{project.estimatedTime}</span>
-            </div>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

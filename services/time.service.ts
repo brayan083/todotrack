@@ -19,6 +19,7 @@ import {
 
 export interface TimeEntry {
   id: string;
+  workspaceId: string;
   userId: string;
   projectId: string;
   taskId?: string | null;
@@ -37,6 +38,7 @@ export interface TimeEntry {
 }
 
 export interface StartTimerInput {
+  workspaceId: string;
   projectId: string;
   taskId?: string | null;
   description?: string;
@@ -70,6 +72,7 @@ export class TimeService extends BaseService {
     try {
       const timeEntriesRef = collection(this.db, this.collectionName);
       const entryData = {
+        workspaceId: data.workspaceId,
         userId,
         projectId: data.projectId,
         taskId: data.taskId || null,
@@ -152,10 +155,14 @@ export class TimeService extends BaseService {
    * @param userId - ID del usuario
    * @param projectId - ID opcional del proyecto para filtrar
    */
-  public async getTimerEntries(userId: string, projectId?: string): Promise<TimeEntry[]> {
+  public async getTimerEntries(userId: string, workspaceId: string, projectId?: string): Promise<TimeEntry[]> {
     try {
       const entriesRef = collection(this.db, this.collectionName);
-      let q = query(entriesRef, where('userId', '==', userId));
+      let q = query(
+        entriesRef,
+        where('userId', '==', userId),
+        where('workspaceId', '==', workspaceId)
+      );
       
       const querySnapshot = await getDocs(q);
       const entries: TimeEntry[] = [];
@@ -164,6 +171,7 @@ export class TimeService extends BaseService {
         const data = doc.data();
         entries.push({
           id: doc.id,
+          workspaceId: data.workspaceId,
           userId: data.userId,
           projectId: data.projectId,
           taskId: data.taskId || null,

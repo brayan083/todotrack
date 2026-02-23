@@ -1,4 +1,4 @@
-import { Archive, Clock, DollarSign, User2 } from "lucide-react";
+import { Archive, Clock, DollarSign } from "lucide-react";
 import type { Project } from "@/services/project.service";
 import type { UserData } from "@/services/user.service";
 import { Badge } from "@/components/ui/badge";
@@ -59,15 +59,6 @@ export const ProjectsGrid = ({
             </CardHeader>
 
             <CardContent className="space-y-3">
-              {project.clientName && (
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="flex items-center gap-1.5 text-muted-foreground bg-muted/50 rounded-md px-2 py-1">
-                    <User2 className="h-3.5 w-3.5" />
-                    <span className="font-medium">{project.clientName}</span>
-                  </div>
-                </div>
-              )}
-
               <div className="flex items-center gap-3 flex-wrap">
                 {project.budget !== null && project.budget !== undefined && (
                   <div className="flex items-center gap-1.5 text-sm">
@@ -84,13 +75,6 @@ export const ProjectsGrid = ({
                   </div>
                 )}
               </div>
-
-              {project.estimatedTime && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Est: {project.estimatedTime}</span>
-                </div>
-              )}
 
               {project.members && project.members.length > 0 && (
                 <div className="flex items-center gap-2 pt-2 border-t border-border">

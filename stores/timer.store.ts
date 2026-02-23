@@ -28,7 +28,7 @@ interface TimerState {
   stopTimer: () => Promise<void>;
   updateElapsed: () => void;
   setActiveEntry: (entry: TimeEntry | null) => void;
-  loadActiveTimer: (userId: string) => Promise<void>;
+  loadActiveTimer: (userId: string, workspaceId: string) => Promise<void>;
   clearTimer: () => void;
 }
 
@@ -76,6 +76,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       const entryId = await timeService.startTimer(userId, data);
       const newEntry: TimeEntry = {
         id: entryId,
+        workspaceId: data.workspaceId,
         userId,
         projectId: data.projectId,
         taskId: data.taskId || null,
@@ -218,6 +219,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
           : undefined;
         
         await activityService.logTimeLogged(
+          activeEntry.workspaceId,
           activeEntry.projectId,
           user.uid,
           user.displayName || user.email || 'Usuario',
@@ -313,10 +315,10 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   /**
    * Carga el temporizador activo del usuario (si existe)
    */
-  loadActiveTimer: async (userId: string) => {
+  loadActiveTimer: async (userId: string, workspaceId: string) => {
     try {
       const timeService = TimeService.getInstance(db);
-      const entries = await timeService.getTimerEntries(userId);
+      const entries = await timeService.getTimerEntries(userId, workspaceId);
       
       // Buscar una entrada sin endTime (temporizador activo)
       const activeEntry = entries.find(entry => !entry.endTime);

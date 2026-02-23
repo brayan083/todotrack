@@ -105,7 +105,6 @@ export const TimesheetEntryDialog = ({
               <SelectContent>
                 <SelectItem value="normal">Normal</SelectItem>
                 <SelectItem value="pomodoro">Pomodoro</SelectItem>
-                <SelectItem value="non-billable">Non-billable</SelectItem>
               </SelectContent>
             </Select>
           </div>

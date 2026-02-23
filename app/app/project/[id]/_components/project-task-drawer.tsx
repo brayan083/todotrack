@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, AlertCircle, CheckCircle2, Clock, LayoutDashboard, Trash2, User2, X } from "lucide-react";
+import { ArrowLeft, AlertCircle, CheckCircle2, Clock, LayoutDashboard, Trash2, User, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,10 +19,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -70,11 +71,12 @@ export const ProjectTaskDrawer: React.FC<ProjectTaskDrawerProps> = ({
   onBackToList,
   onDeleteTask,
 }) => {
-  const selectedAssigneeIds = editData.assigneeIds ?? selectedTask?.assigneeIds ?? [];
-  const selectedAssignees = assignees.filter((assignee) =>
-    selectedAssigneeIds.includes(assignee.uid)
+  const selectedAssigneeId = editData.assigneeId ?? selectedTask?.assigneeId ?? "";
+  const selectedAssignees = assignees.filter((assignee) => assignee.uid === selectedAssigneeId);
+  const selectedTagIds = useMemo(
+    () => editData.tagIds ?? selectedTask?.tagIds ?? [],
+    [editData.tagIds, selectedTask?.tagIds]
   );
-  const selectedTagIds = editData.tagIds ?? selectedTask?.tagIds ?? [];
   const [tagInput, setTagInput] = useState("");
   const [tagsSaving, setTagsSaving] = useState(false);
 
@@ -88,18 +90,17 @@ export const ProjectTaskDrawer: React.FC<ProjectTaskDrawerProps> = ({
       setTagInput("");
       return;
     }
-    const tagIds = editData.tagIds ?? selectedTask.tagIds ?? [];
-    const tagNames = tagIds
+    const tagNames = selectedTagIds
       .map((tagId) => availableTags.find((tag) => tag.id === tagId)?.name)
       .filter(Boolean) as string[];
     setTagInput(tagNames.join(", "));
-  }, [selectedTask?.id, availableTags]);
+  }, [selectedTask, selectedTagIds, availableTags]);
 
-  const toggleAssignee = (assigneeId: string) => {
-    const nextIds = selectedAssigneeIds.includes(assigneeId)
-      ? selectedAssigneeIds.filter((id) => id !== assigneeId)
-      : [...selectedAssigneeIds, assigneeId];
-    setEditData({ ...editData, assigneeIds: nextIds, assigneeId: nextIds[0] || "" });
+  const handleAssigneeChange = (assigneeId: string) => {
+    setEditData({
+      ...editData,
+      assigneeId: assigneeId === "unassigned" ? "" : assigneeId,
+    });
   };
 
   const handleTagsCommit = async () => {
@@ -269,7 +270,9 @@ export const ProjectTaskDrawer: React.FC<ProjectTaskDrawerProps> = ({
                         <Select
                           disabled={!canEditTaskActions}
                           value={editData.status || "todo"}
-                          onValueChange={(value) => setEditData({ ...editData, status: value })}
+                          onValueChange={(value) =>
+                            setEditData({ ...editData, status: value as Task["status"] })
+                          }
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -277,7 +280,7 @@ export const ProjectTaskDrawer: React.FC<ProjectTaskDrawerProps> = ({
                           <SelectContent>
                             <SelectItem value="todo">To Do</SelectItem>
                             <SelectItem value="in-progress">In Progress</SelectItem>
-                            <SelectItem value="done">Done</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -363,35 +366,29 @@ export const ProjectTaskDrawer: React.FC<ProjectTaskDrawerProps> = ({
                       <DropdownMenuContent align="start" className="w-64">
                         <DropdownMenuLabel>Assign to</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        {assignees.map((assignee) => (
-                          <DropdownMenuCheckboxItem
-                            key={assignee.uid}
-                            checked={selectedAssigneeIds.includes(assignee.uid)}
-                            onCheckedChange={() => toggleAssignee(assignee.uid)}
-                            disabled={!canEditTaskActions}
-                          >
-                            {assignee.label}
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            setEditData({ ...editData, assigneeIds: [], assigneeId: "" })
-                          }
+                        <DropdownMenuRadioGroup
+                          value={selectedAssigneeId || "unassigned"}
+                          onValueChange={handleAssigneeChange}
                         >
-                          Clear selection
-                        </DropdownMenuItem>
+                          <DropdownMenuRadioItem value="unassigned">
+                            Unassigned
+                          </DropdownMenuRadioItem>
+                          {assignees.map((assignee) => (
+                            <DropdownMenuRadioItem key={assignee.uid} value={assignee.uid}>
+                              {assignee.label}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
                       </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {selectedAssigneeIds.length > 0 ? (
+                    {selectedAssigneeId ? (
                       <div className="mt-4 space-y-2">
-                        {selectedAssigneeIds.map((assigneeId) => {
-                          const member = usersMap[assigneeId];
+                        {(() => {
+                          const member = usersMap[selectedAssigneeId];
                           if (!member) return null;
                           return (
                             <div
-                              key={assigneeId}
                               className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/40 p-4"
                             >
                               <Avatar className="h-11 w-11">
@@ -409,11 +406,11 @@ export const ProjectTaskDrawer: React.FC<ProjectTaskDrawerProps> = ({
                               </div>
                             </div>
                           );
-                        })}
+                        })()}
                       </div>
                     ) : (
                       <div className="mt-4 flex items-center gap-3 rounded-xl border border-dashed border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                        <User2 className="h-4 w-4" />
+                        <User className="h-4 w-4" />
                         <span>No one assigned yet</span>
                       </div>
                     )}

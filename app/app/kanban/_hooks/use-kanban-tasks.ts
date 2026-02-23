@@ -55,10 +55,11 @@ export const useKanbanTasks = ({
       sortTasksByPosition(filteredTasksWithFilters.filter((task) => task.status === "in-progress")),
     [filteredTasksWithFilters]
   );
-  const doneTasks = useMemo(
-    () => sortTasksByPosition(filteredTasksWithFilters.filter((task) => task.status === "done")),
+  const completedTasks = useMemo(
+    () =>
+      sortTasksByPosition(filteredTasksWithFilters.filter((task) => task.status === "completed")),
     [filteredTasksWithFilters]
   );
 
-  return { filteredTasksWithFilters, todoTasks, inProgressTasks, doneTasks };
+  return { filteredTasksWithFilters, todoTasks, inProgressTasks, completedTasks };
 };

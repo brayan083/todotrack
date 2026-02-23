@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ArrowRight, Clock, CheckSquare, BarChart3, Zap, Users, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores';
@@ -67,10 +68,10 @@ const Landing: React.FC = () => {
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="h-14 font-semibold text-lg hover:bg-muted">
-              <a href="/">
+              <Link href="/">
                 <Clock className="mr-2 h-5 w-5" />
                 Ver demo
-              </a>
+              </Link>
             </Button>
           </div>
 
@@ -85,10 +86,16 @@ const Landing: React.FC = () => {
                 </div>
                 <div className="mx-auto w-64 h-6 bg-background rounded text-[10px] flex items-center justify-center text-muted-foreground font-mono">app.TimeTrack.com/dashboard</div>
               </div>
-              <div className="aspect-[16/9] w-full bg-card relative">
-                 <img alt="Dashboard Mockup" className="w-full h-full object-cover opacity-90" src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200&h=675&fit=crop" />
-                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60"></div>
-              </div>
+                <div className="aspect-[16/9] w-full bg-card relative">
+                  <Image
+                   alt="Dashboard Mockup"
+                   src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200&h=675&fit=crop"
+                   fill
+                   sizes="(min-width: 1024px) 900px, 100vw"
+                   className="object-cover opacity-90"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-60"></div>
+                </div>
             </div>
           </div>
         </div>

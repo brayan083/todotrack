@@ -69,7 +69,7 @@ export const ProjectTaskStatsCard = ({ taskStats }: ProjectTaskStatsCardProps) =
           <div className="flex items-center justify-between py-2.5 px-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-green-600" />
-              <span className="text-sm font-medium">Done</span>
+              <span className="text-sm font-medium">Completed</span>
             </div>
             <Badge
               variant="secondary"

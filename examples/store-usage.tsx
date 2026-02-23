@@ -6,6 +6,7 @@
 'use client';
 
 import { useAuth, useTimer, useProjects, useTasks, useFormattedTime } from '@/hooks';
+import type { Task } from '@/services/task.service';
 import { useEffect } from 'react';
 
 /**
@@ -175,14 +176,14 @@ export function ProjectsList() {
   const handleCreate = async () => {
     try {
       await createProject({
+        workspaceId: 'default-workspace-id',
         name: 'Nuevo Proyecto',
         description: 'Descripción del proyecto',
         color: '#3B82F6',
-        members: [],
+        members: ['current-user-id'],
         ownerId: 'current-user-id', // En producción, obtener del usuario actual
-        clientId: 'default-client-id', // En producción, seleccionar del diálogo
-        clientName: 'Cliente Ejemplo', // En producción, obtener del cliente seleccionado
         isArchived: false,
+        visibility: 'private',
       });
     } catch (error) {
       console.error('Error al crear proyecto:', error);
@@ -261,25 +262,29 @@ export function SimpleKanban() {
 
   const todoTasks = filteredTasks.filter(t => t.status === 'todo');
   const inProgressTasks = filteredTasks.filter(t => t.status === 'in-progress');
-  const doneTasks = filteredTasks.filter(t => t.status === 'done');
+  const doneTasks = filteredTasks.filter(t => t.status === 'completed');
 
-  const handleCreateTask = async (status: string) => {
+  const handleCreateTask = async (status: Task["status"]) => {
     try {
       await createTask({
+        workspaceId: 'default-workspace',
         projectId: 'default-project', // En producción, obtener del contexto
         title: 'Nueva Tarea',
         status,
-        assigneeIds: ['current-user-id'], // En producción, obtener del user actual
         assigneeId: 'current-user-id',
         position: 0, // En producción, calcular basado en tareas existentes
         priority: 'medium',
+        subtasks: [],
+        attachments: [],
+        isDeleted: false,
+        deletedAt: null,
       });
     } catch (error) {
       console.error('Error al crear tarea:', error);
     }
   };
 
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
+  const handleStatusChange = async (taskId: string, newStatus: Task["status"]) => {
     try {
       await updateTaskStatus(taskId, newStatus);
     } catch (error) {
@@ -313,12 +318,12 @@ export function SimpleKanban() {
               <h4 className="font-medium mb-2">{task.title}</h4>
               <select
                 value={task.status}
-                onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                onChange={(e) => handleStatusChange(task.id, e.target.value as Task["status"])}
                 className="text-xs border rounded px-2 py-1"
               >
                 <option value="todo">Por Hacer</option>
                 <option value="in-progress">En Progreso</option>
-                <option value="done">Completada</option>
+                <option value="completed">Completada</option>
               </select>
             </div>
           ))}
@@ -339,12 +344,12 @@ export function SimpleKanban() {
               <h4 className="font-medium mb-2">{task.title}</h4>
               <select
                 value={task.status}
-                onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                onChange={(e) => handleStatusChange(task.id, e.target.value as Task["status"])}
                 className="text-xs border rounded px-2 py-1"
               >
                 <option value="todo">Por Hacer</option>
                 <option value="in-progress">En Progreso</option>
-                <option value="done">Completada</option>
+                <option value="completed">Completada</option>
               </select>
             </div>
           ))}
@@ -365,12 +370,12 @@ export function SimpleKanban() {
               <h4 className="font-medium mb-2 line-through">{task.title}</h4>
               <select
                 value={task.status}
-                onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                onChange={(e) => handleStatusChange(task.id, e.target.value as Task["status"])}
                 className="text-xs border rounded px-2 py-1"
               >
                 <option value="todo">Por Hacer</option>
                 <option value="in-progress">En Progreso</option>
-                <option value="done">Completada</option>
+                <option value="completed">Completada</option>
               </select>
             </div>
           ))}
@@ -391,7 +396,7 @@ export function DashboardOverview() {
   const formattedTime = useFormattedTime(elapsedSeconds);
 
   const activeProjects = projects.filter(p => !p.isArchived);
-  const pendingTasks = tasks.filter(t => t.status !== 'done');
+  const pendingTasks = tasks.filter(t => t.status !== 'completed');
 
   return (
     <div>

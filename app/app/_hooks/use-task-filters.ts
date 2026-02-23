@@ -51,11 +51,11 @@ export const useTaskFilters = ({
 
     if (assigneeFilters.length > 0) {
       filtered = filtered.filter((task) => {
-        const assigneeIds = task.assigneeIds || (task.assigneeId ? [task.assigneeId] : []);
-        if (assigneeIds.length === 0) {
+        const assigneeId = task.assigneeId;
+        if (!assigneeId) {
           return assigneeFilters.includes(UNASSIGNED_FILTER_VALUE);
         }
-        return assigneeIds.some((assigneeId) => assigneeFilters.includes(assigneeId));
+        return assigneeFilters.includes(assigneeId);
       });
     }
 

@@ -21,8 +21,8 @@ interface ProjectState {
   setSelectedProject: (project: Project | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  loadProjects: (userId: string) => Promise<void>;
-  subscribeToProjects: (userId: string) => void;
+  loadProjects: (userId: string, workspaceId: string) => Promise<void>;
+  subscribeToProjects: (userId: string, workspaceId: string) => void;
   unsubscribe: () => void;
   createProject: (data: Omit<Project, 'id' | 'createdAt'>) => Promise<string>;
   updateProject: (projectId: string, updates: Partial<Project>) => Promise<void>;
@@ -50,11 +50,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   /**
    * Carga los proyectos del usuario (una sola vez)
    */
-  loadProjects: async (userId: string) => {
+  loadProjects: async (userId: string, workspaceId: string) => {
     try {
       set({ loading: true, error: null });
       const projectService = ProjectService.getInstance(db);
-      const projects = await projectService.getAllProjects(userId);
+      const projects = await projectService.getAllProjects(userId, workspaceId);
       set({ projects, loading: false });
     } catch (error: any) {
       set({ 
@@ -68,12 +68,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   /**
    * Se suscribe a cambios en tiempo real de los proyectos
    */
-  subscribeToProjects: (userId: string) => {
+  subscribeToProjects: (userId: string, workspaceId: string) => {
     // Desuscribirse de cualquier suscripción anterior
     get().unsubscribe();
     
     const projectService = ProjectService.getInstance(db);
-    const subscription = projectService.getProjectsByUser(userId).subscribe({
+    const subscription = projectService.getProjectsByUser(userId, workspaceId).subscribe({
       next: (projects) => {
         set({ projects, loading: false, error: null });
       },
@@ -112,6 +112,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (user) {
         const activityService = ActivityLogService.getInstance(db);
         await activityService.logProjectCreated(
+          data.workspaceId,
           projectId,
           user.uid,
           user.displayName || user.email || 'Usuario',
@@ -167,6 +168,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (user && project) {
         const activityService = ActivityLogService.getInstance(db);
         await activityService.logProjectArchived(
+          project.workspaceId,
           projectId,
           user.uid,
           user.displayName || user.email || 'Usuario',

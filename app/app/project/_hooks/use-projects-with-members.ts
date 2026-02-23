@@ -6,24 +6,26 @@ import type { UserData } from "@/services/user.service";
 import { ProjectService } from "@/services/project.service";
 import { UserService } from "@/services/user.service";
 import { db } from "@/lib/firebase.config";
+import { useWorkspace } from "@/hooks";
 
 type UseProjectsWithMembersArgs = {
   userId?: string | null;
 };
 
 export const useProjectsWithMembers = ({ userId }: UseProjectsWithMembersArgs) => {
+  const { workspaceId } = useWorkspace();
   const [projects, setProjects] = useState<Project[]>([]);
   const [usersMap, setUsersMap] = useState<Record<string, UserData>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadProjects = async () => {
-      if (!userId) return;
+      if (!userId || !workspaceId) return;
 
       try {
         setLoading(true);
         const projectService = ProjectService.getInstance(db);
-        const userProjects = await projectService.getAllProjects(userId);
+        const userProjects = await projectService.getAllProjects(userId, workspaceId);
         setProjects(userProjects);
 
         const uniqueUserIds = new Set<string>();
@@ -56,7 +58,7 @@ export const useProjectsWithMembers = ({ userId }: UseProjectsWithMembersArgs) =
     };
 
     loadProjects();
-  }, [userId]);
+  }, [userId, workspaceId]);
 
   return { projects, setProjects, usersMap, loading };
 };

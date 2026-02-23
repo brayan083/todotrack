@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, Loader2, Pencil, Trash2, AlertCircle } from "lucide-react";
 import type { Project } from "@/services/project.service";
 import { ProjectService } from "@/services/project.service";
-import { ClientService, type Client } from "@/services/client.service";
 import { db } from "@/lib/firebase.config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +31,8 @@ const COLORS = [
   "#ec4899",
 ];
 
+type ProjectVisibility = 'public' | 'private';
+
 type ProjectEditDialogProps = {
   project: Project;
   onProjectUpdated: (updates: Partial<Project>) => void;
@@ -43,16 +44,20 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<"archive" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loadingClients, setLoadingClients] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    color: string;
+    budget: string;
+    hourlyRate: string;
+    visibility: ProjectVisibility;
+  }>({
     name: project.name || "",
     description: project.description || "",
     color: project.color || COLORS[4],
-    clientId: project.clientId || "none",
     budget: project.budget?.toString() || "",
     hourlyRate: project.hourlyRate?.toString() || "",
-    estimatedTime: project.estimatedTime || "",
+    visibility: project.visibility || "private",
   });
 
   useEffect(() => {
@@ -61,40 +66,12 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
       name: project.name || "",
       description: project.description || "",
       color: project.color || COLORS[4],
-      clientId: project.clientId || "none",
       budget: project.budget?.toString() || "",
       hourlyRate: project.hourlyRate?.toString() || "",
-      estimatedTime: project.estimatedTime || "",
+      visibility: project.visibility || "private",
     });
     setError(null);
   }, [open, project]);
-
-  useEffect(() => {
-    if (!open) return;
-    const loadClients = async () => {
-      try {
-        setLoadingClients(true);
-        const clientService = ClientService.getInstance(db);
-        const userClients = await clientService.getAllClients();
-        const filteredClients = userClients.filter(
-          (client) => client.ownerId === project.ownerId
-        );
-        setClients(filteredClients);
-      } catch (loadError) {
-        console.error("Error loading clients:", loadError);
-      } finally {
-        setLoadingClients(false);
-      }
-    };
-
-    loadClients();
-  }, [open]);
-
-
-  const selectedClient = useMemo(() => {
-    if (!formData.clientId || formData.clientId === "none") return undefined;
-    return clients.find((client) => client.id === formData.clientId);
-  }, [clients, formData.clientId]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -112,15 +89,13 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
         name: formData.name.trim(),
         description: formData.description.trim() || "",
         color: formData.color,
-        clientId: formData.clientId !== "none" ? formData.clientId : undefined,
-        clientName: selectedClient?.name || undefined,
         budget:
           formData.budget && !isNaN(Number(formData.budget)) ? Number(formData.budget) : null,
         hourlyRate:
           formData.hourlyRate && !isNaN(Number(formData.hourlyRate))
             ? Number(formData.hourlyRate)
             : null,
-        estimatedTime: formData.estimatedTime.trim() || "",
+        visibility: formData.visibility === "public" ? "public" : "private",
       };
 
       await projectService.updateProject(project.id, updates);
@@ -233,22 +208,23 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
           </div>
 
           <div className="space-y-2">
-            <Label>Client</Label>
+            <Label>Visibility</Label>
             <Select
-              value={formData.clientId}
-              onValueChange={(value) => setFormData({ ...formData, clientId: value })}
-              disabled={loading || loadingClients}
+              value={formData.visibility}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  visibility: value === "public" ? "public" : "private",
+                })
+              }
+              disabled={loading}
             >
               <SelectTrigger>
-                <SelectValue placeholder={loadingClients ? "Loading clients..." : "Select client"} />
+                <SelectValue placeholder="Select visibility" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No client</SelectItem>
-                {clients.map((client) => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="private">Private</SelectItem>
+                <SelectItem value="public">Public</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -280,19 +256,6 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
                 disabled={loading}
               />
             </div>
-          </div>
-
-
-          <div className="space-y-2">
-            <Label htmlFor="project-estimated-time">Estimated Time</Label>
-            <Input
-              id="project-estimated-time"
-              value={formData.estimatedTime}
-              onChange={(event) =>
-                setFormData({ ...formData, estimatedTime: event.target.value })
-              }
-              disabled={loading}
-            />
           </div>
 
           <div className="flex justify-end">

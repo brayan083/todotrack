@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Trash2 } from "lucide-react";
+import Image from "next/image";
 import { formatDurationClock, getEntryDurationSeconds } from "../_utils/time-utils";
 
 type TimesheetTableProps = {
@@ -93,9 +94,11 @@ export const TimesheetTable = ({
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {entryUser?.photoURL && (
-                    <img
+                    <Image
                       src={entryUser.photoURL}
                       alt={entryUserLabel}
+                      width={24}
+                      height={24}
                       className="w-6 h-6 rounded-full mr-2 inline-block align-middle"
                     />
                   )}
