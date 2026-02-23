@@ -25,7 +25,7 @@ export type ProjectSummary = {
 };
 export type RecentEntry = TimeEntry & { duration: number };
 
-export const useDashboardData = () => {
+export const useDashboardData = (dateRange?: { startDate: Date; endDate: Date }) => {
   const { user } = useAuth();
   const { workspaceId } = useWorkspace();
   const { projects, loading: projectsLoading } = useProjects();
@@ -96,15 +96,22 @@ export const useDashboardData = () => {
     });
   }, [mergedEntries, activeEntry, elapsedSeconds]);
 
+  // Si hay dateRange, usarlo para filtrar; si no, usar hoy y semana actual
   const now = useMemo(() => new Date(), []);
   const todayRange = useMemo(() => {
+    if (dateRange) {
+      return { start: dateRange.startDate, end: dateRange.endDate };
+    }
     const start = startOfDay(now);
     return { start, end: endOfDay(now) };
-  }, [now]);
+  }, [now, dateRange]);
   const weekRange = useMemo(() => {
+    if (dateRange) {
+      return { start: dateRange.startDate, end: dateRange.endDate };
+    }
     const start = startOfWeek(now, { weekStartsOn: WEEK_STARTS_ON });
     return { start, end: endOfWeek(now, { weekStartsOn: WEEK_STARTS_ON }) };
-  }, [now]);
+  }, [now, dateRange]);
 
   const { todaySeconds, yesterdaySeconds, weeklySeconds } = useMemo(() => {
     const todaySeconds = entriesWithDuration
@@ -168,8 +175,14 @@ export const useDashboardData = () => {
       .filter((project) => !project.isArchived)
       .map((project) => {
         const totalSeconds = totalsByProject.get(project.id) || 0;
-        const estimatedSeconds = null;
-        const progress = 100;
+        // Usar estimatedHours si está definido, convertir a segundos
+        const estimatedSeconds = project.estimatedHours && project.estimatedHours > 0
+          ? project.estimatedHours * 3600
+          : null;
+        // Calcular progreso real
+        const progress = estimatedSeconds && estimatedSeconds > 0
+          ? Math.min(100, Math.round((totalSeconds / estimatedSeconds) * 100))
+          : 100;
 
         return {
           project,

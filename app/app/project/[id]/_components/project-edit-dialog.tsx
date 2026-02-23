@@ -50,6 +50,7 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
     color: string;
     budget: string;
     hourlyRate: string;
+    estimatedHours: string;
     visibility: ProjectVisibility;
   }>({
     name: project.name || "",
@@ -57,6 +58,7 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
     color: project.color || COLORS[4],
     budget: project.budget?.toString() || "",
     hourlyRate: project.hourlyRate?.toString() || "",
+    estimatedHours: project.estimatedHours?.toString() || "",
     visibility: project.visibility || "private",
   });
 
@@ -68,6 +70,7 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
       color: project.color || COLORS[4],
       budget: project.budget?.toString() || "",
       hourlyRate: project.hourlyRate?.toString() || "",
+      estimatedHours: project.estimatedHours?.toString() || "",
       visibility: project.visibility || "private",
     });
     setError(null);
@@ -94,6 +97,10 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
         hourlyRate:
           formData.hourlyRate && !isNaN(Number(formData.hourlyRate))
             ? Number(formData.hourlyRate)
+            : null,
+        estimatedHours:
+          formData.estimatedHours && !isNaN(Number(formData.estimatedHours))
+            ? Number(formData.estimatedHours)
             : null,
         visibility: formData.visibility === "public" ? "public" : "private",
       };
@@ -229,7 +236,7 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label htmlFor="project-budget">Budget</Label>
               <Input
@@ -254,6 +261,21 @@ export const ProjectEditDialog = ({ project, onProjectUpdated }: ProjectEditDial
                   setFormData({ ...formData, hourlyRate: event.target.value })
                 }
                 disabled={loading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-estimated-hours">Estimated Hours</Label>
+              <Input
+                id="project-estimated-hours"
+                type="number"
+                min="0"
+                step="0.1"
+                value={formData.estimatedHours}
+                onChange={(event) =>
+                  setFormData({ ...formData, estimatedHours: event.target.value })
+                }
+                disabled={loading}
+                placeholder="e.g. 40"
               />
             </div>
           </div>

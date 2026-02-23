@@ -37,6 +37,7 @@ export interface Project {
   userRoles?: Record<string, ProjectRole>;
   createdAt: Date;
   updatedAt?: Date;
+  estimatedHours?: number | null; // NUEVO: Horas estimadas para el proyecto
 }
 
 export class ProjectService extends BaseService {
@@ -106,6 +107,7 @@ export class ProjectService extends BaseService {
             userRoles: data.userRoles,
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate(),
+            estimatedHours: data.estimatedHours ?? null,
           });
         });
       });
@@ -169,6 +171,7 @@ export class ProjectService extends BaseService {
         userRoles: data.userRoles,
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate(),
+        estimatedHours: data.estimatedHours ?? null,
       };
     } catch (error: any) {
       console.error('Error al obtener proyecto:', error);

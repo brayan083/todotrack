@@ -135,38 +135,34 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
         if (!workspace?.id || workspaceMembers.length === 0) {
             setWorkspaceMembersMap({})
             setWorkspaceMembersLoading(false)
-            return
+            return;
         }
-
-        let isMounted = true
-        setWorkspaceMembersLoading(true)
-        setWorkspaceMembersError(null)
-        const userService = UserService.getInstance(db)
-
+        let isMounted = true;
+        const userService = UserService.getInstance(db);
+        setWorkspaceMembersLoading(true);
         Promise.all(workspaceMembers.map((memberId) => userService.getUser(memberId)))
             .then((users) => {
-                if (!isMounted) return
-                const nextMap: Record<string, UserData> = {}
+                if (!isMounted) return;
+                const nextMap: Record<string, UserData> = {};
                 users.forEach((member) => {
                     if (member) {
-                        nextMap[member.uid] = member
+                        nextMap[member.uid] = member;
                     }
-                })
-                setWorkspaceMembersMap(nextMap)
+                });
+                setWorkspaceMembersMap(nextMap);
             })
             .catch((error: any) => {
-                if (!isMounted) return
-                setWorkspaceMembersError(error.message || "Unable to load workspace members")
+                if (!isMounted) return;
+                setWorkspaceMembersError(error.message || "Unable to load workspace members");
             })
             .finally(() => {
-                if (!isMounted) return
-                setWorkspaceMembersLoading(false)
-            })
-
+                if (!isMounted) return;
+                setWorkspaceMembersLoading(false);
+            });
         return () => {
-            isMounted = false
-        }
-    }, [workspace?.id, workspaceMembers])
+            isMounted = false;
+        };
+    }, [workspace?.id, workspaceMembers]);
 
     const handleWorkspaceSelect = (workspaceId: string) => {
         const nextWorkspace = workspaces.find((item) => item.id === workspaceId) || null
@@ -311,11 +307,13 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
     }, [workspace?.members, workspace?.ownerId])
 
     const renderProjectItem = (project: (typeof projects)[number]) => {
-        const role = getUserRole(project, user?.uid, workspace?.members)
-        const canManage = canManageProject(role)
-
+        const role = getUserRole(project, user?.uid, workspace?.members);
+        const canManage = canManageProject(role);
         return (
-            <SidebarMenuItem key={project.id}>
+            <SidebarMenuItem
+                key={project.id}
+                style={{ borderLeft: `4px solid ${project.color || '#ccc'}` }}
+            >
                 <SidebarMenuButton asChild isActive={pathname === `/app/project/${project.id}`}>
                     <Link href={`/app/project/${project.id}`}>
                         <FolderKanban />
@@ -353,7 +351,7 @@ export function AppSidebarAdvanced({ ...props }: React.ComponentProps<typeof Sid
                     </DropdownMenuContent>
                 </DropdownMenu>
             </SidebarMenuItem>
-        )
+        );
     }
 
     return (
